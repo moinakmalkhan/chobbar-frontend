@@ -4,117 +4,147 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useRef } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/i18n/client";
+import { useRouter } from "@/i18n/link";
+import { refreshAccessToken } from "@/lib/api";
 import { env } from "@/lib/env";
 import { isExpiring } from "@/lib/jwt";
-import { refreshAccessToken } from "@/lib/api";
 import { queryKeys } from "@/lib/query-client";
 import { notify } from "@/lib/toast";
+import { appPath } from "@/lib/utils";
 import { notificationsService } from "@/services/notifications";
+import { useAuthStore } from "@/stores/auth-store";
 import type { Notification } from "@/types/api";
 
 export function useUnreadCount() {
   const { isAuthenticated, hydrated } = useAuth();
   return useQuery({
     queryKey: queryKeys.unread,
-    queryFn: notificationsService.unreadCount,
+    queryFn: notificationsService.unread,
     enabled: hydrated && isAuthenticated,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
 }
 
-export function useNotificationsFeed(unreadOnly = false) {
+export function useNotificationsFeed() {
   const { isAuthenticated, hydrated } = useAuth();
   return useInfiniteQuery({
-    queryKey: [...queryKeys.notifications, unreadOnly],
-    queryFn: ({ pageParam }) => notificationsService.list(pageParam, unreadOnly),
+    queryKey: queryKeys.notifications,
+    queryFn: ({ pageParam }) => notificationsService.list(pageParam),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.next ? new URL(last.next).searchParams.get("cursor") : null),
+    getNextPageParam: (last) => last.next,
     enabled: hydrated && isAuthenticated,
   });
 }
 
 export function useNotificationMutations() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
     queryClient.invalidateQueries({ queryKey: queryKeys.unread });
   };
-  const markRead = useMutation({ mutationFn: notificationsService.markRead, onSuccess: invalidate });
-  const markAllRead = useMutation({ mutationFn: notificationsService.markAllRead, onSuccess: () => { invalidate(); notify.success("All caught up"); } });
-  const clearRead = useMutation({ mutationFn: notificationsService.clearRead, onSuccess: invalidate });
-  return { markRead, markAllRead, clearRead };
+  const markRead = useMutation({ mutationFn: notificationsService.read, onSuccess: invalidate });
+  const markAllRead = useMutation({
+    mutationFn: notificationsService.readAll,
+    onSuccess: () => {
+      invalidate();
+      notify.success(t("account.allCaughtUp"));
+    },
+  });
+  return { markRead, markAllRead };
 }
 
 /**
- * Realtime notifications over WebSocket. Reconnects with backoff, refreshes the
- * JWT before connecting, and surfaces each event as a toast + cache update.
+ * Realtime notifications over WebSocket. Refreshes the JWT before connecting,
+ * reconnects with exponential backoff, pauses while the tab is hidden (saves
+ * battery on low-end phones) and surfaces each event as a toast + cache update.
  */
 export function useRealtimeNotifications() {
-  const { isAuthenticated, hydrated, access } = useAuth();
+  const { isAuthenticated, hydrated } = useAuth();
   const queryClient = useQueryClient();
-  const socket = useRef<WebSocket | null>(null);
-  const attempts = useRef(0);
+  const router = useRouter();
+  const { t } = useI18n();
+  const routerRef = useRef(router);
+  const tRef = useRef(t);
+  useEffect(() => {
+    routerRef.current = router;
+    tRef.current = t;
+  });
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated) return;
+    let socket: WebSocket | null = null;
     let closed = false;
+    let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let ping: ReturnType<typeof setInterval> | null = null;
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.data === "pong") return;
+      let payload: Partial<Notification> & { event?: string };
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (payload.event !== "notification") return;
+      queryClient.invalidateQueries({ queryKey: queryKeys.unread });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+      if (payload.kind === "order" || payload.kind === "payment" || payload.kind === "return") {
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["order"] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.returns });
+      }
+      if (payload.kind === "chat") {
+        queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+        queryClient.invalidateQueries({ queryKey: queryKeys.chatUnread });
+      }
+      const path = appPath(payload.url);
+      const title = payload.title ?? "";
+      const body = payload.body ?? "";
+      if (path)
+        notify.action(title, body, {
+          label: tRef.current("common.viewAll"),
+          onClick: () => routerRef.current.push(path),
+        });
+      else if (payload.level === "success") notify.success(title, body);
+      else if (payload.level === "warning") notify.warning(title, body);
+      else notify.info(title, body);
+    };
 
     const connect = async () => {
-      let token = access;
+      if (closed || document.visibilityState === "hidden") return;
+      let token = useAuthStore.getState().access;
       if (!token || isExpiring(token)) token = await refreshAccessToken();
       if (!token || closed) return;
-      const ws = new WebSocket(`${env.wsUrl}/notifications/?token=${encodeURIComponent(token)}`);
-      socket.current = ws;
-      ws.onopen = () => {
-        attempts.current = 0;
+      socket = new WebSocket(`${env.wsUrl}/notifications/?token=${encodeURIComponent(token)}`);
+      socket.onopen = () => {
+        attempts = 0;
+        // A missed event while offline? Catch up once on (re)connect.
+        queryClient.invalidateQueries({ queryKey: queryKeys.unread });
       };
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data) as Partial<Notification> & { event?: string };
-          if (payload.event !== "notification") return;
-          queryClient.invalidateQueries({ queryKey: queryKeys.unread });
-          queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
-          if (payload.kind === "order" || payload.kind === "payment") {
-            queryClient.invalidateQueries({ queryKey: ["orders"] });
-            queryClient.invalidateQueries({ queryKey: ["order"] });
-          }
-          if (payload.kind === "quote") queryClient.invalidateQueries({ queryKey: ["quotes"] });
-          if (payload.kind === "chat") {
-            queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
-            queryClient.invalidateQueries({ queryKey: queryKeys.chatUnread });
-          }
-          const title = payload.title ?? "Update";
-          const body = payload.body ?? "";
-          const url = payload.url;
-          const action = url ? { label: "Open", onClick: () => (window.location.href = url) } : undefined;
-          if (payload.level === "success") notify.success(title, body);
-          else if (payload.level === "warning") notify.warning(title, body);
-          else if (payload.level === "error") notify.error({ detail: body, code: "notification" }, title);
-          else if (action) notify.action(title, body, action);
-          else notify.info(title, body);
-        } catch {
-          /* ignore malformed frames */
-        }
+      socket.onmessage = onMessage;
+      socket.onclose = (e) => {
+        socket = null;
+        if (closed || e.code === 4401) return;
+        timer = setTimeout(connect, Math.min(30_000, 1000 * 2 ** attempts++));
       };
-      ws.onclose = () => {
-        if (closed) return;
-        const delay = Math.min(30_000, 1000 * 2 ** attempts.current++);
-        timer = setTimeout(connect, delay);
-      };
-      ws.onerror = () => ws.close();
+      socket.onerror = () => socket?.close();
     };
 
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && !socket) connect();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     connect();
-    const ping = setInterval(() => socket.current?.readyState === WebSocket.OPEN && socket.current.send("ping"), 45_000);
+    ping = setInterval(() => socket?.readyState === WebSocket.OPEN && socket.send("ping"), 45_000);
     return () => {
       closed = true;
-      clearInterval(ping);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (ping) clearInterval(ping);
       if (timer) clearTimeout(timer);
-      socket.current?.close();
+      socket?.close();
     };
-    // Reconnect only when auth state flips, not on every token rotation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, isAuthenticated, queryClient]);
 }

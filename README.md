@@ -1,28 +1,31 @@
-# Leepa Sports — storefront & B2B account area
+# Chobbar — web storefront
 
-Next.js 16 · React 19 · TypeScript · Tailwind v4 · TanStack Query · Zustand · Radix UI
+Next.js storefront for **[chobbar.shop](https://chobbar.shop)**: activewear and streetwear made in Sialkot, sold direct to customers across Pakistan.
+It talks to the Django API in `chobbar-backend` (`/api/v1/`) and its WebSockets for support chat and realtime notifications.
 
-The customer-facing side of the Leepa Sports wholesale platform. It talks to the Django API in
-`leepasports-backend` (`/api/v1/`) and its WebSockets for chat and realtime notifications.
+- English, Urdu and Arabic, with full right-to-left layouts. Visitors land in their language automatically (saved choice → country from the CDN's IP header → browser language).
+- Guest-first shopping: bag, wishlist and recently viewed work without an account; sign in with email or Google (Gmail) and everything syncs.
+- Cash on delivery and bank transfer / JazzCash / EasyPaisa with receipt upload, live delivery quotes per city, coupons, order tracking, returns and exchanges, reviews, support chat.
+- Fast on low-end phones: server-rendered pages, CSS-only animations, lazy-loaded widgets, optimised images, reduced effects on weak devices.
 
-## Features
-- **Catalog**: mega-menu built from live categories (only categories with products), filterable/sortable listings with URL state and pagination, category landing pages, SEO metadata, sitemap, JSON-LD.
-- **Search**: ⌘K / debounced autocomplete dropdown with products, categories and fabrics; full results page with filters, typo tolerance and "did you mean" suggestions.
-- **Product configurator**: fabric picker with live mill-price deltas, size × gender quantity matrix with keyboard navigation and size surcharges, customisation (colour, decoration, logo placements, names & numbers, artwork upload), live price breakdown (labour, fabric, group/volume discounts, next tier nudge), add to order or request a quote.
-- **Cart & checkout**: server-priced cart with per-size editing, guest carts merged on sign-in, save-as-list, quote requests, checkout with addresses, freight estimate, PO number, bank transfer or net terms, approval routing.
-- **Quick order** by SKU with spreadsheet paste; **public order tracking** by number + email.
-- **Account**: dashboard KPIs, orders with status timeline, payments & proof upload, printable invoice/pro-forma, cancel/approve/reorder, quotes (accept online), saved lists, addresses, team & roles with invitations and spend limits, company profile, notifications feed, messages with live chat, settings (profile, email preferences, password).
-- **Auth**: email + password, Google sign-in (GIS), verification, password reset, invitations; JWT refreshed proactively from the decoded expiry in an axios interceptor.
-- **Realtime**: WebSocket notifications → toasts and cache invalidation; chat with optimistic sends, typing and read receipts.
-- **Performance**: ISR for public pages, lazy-loaded heavy widgets, `next/image`, reduced motion on low-end devices, small UI kit instead of a heavy component library.
-
-## Getting started
+## Run locally
 ```bash
 npm install
-cp .env.example .env.local   # NEXT_PUBLIC_API_URL, NEXT_PUBLIC_WS_URL, NEXT_PUBLIC_GOOGLE_CLIENT_ID
-npm run dev                   # http://localhost:3000
+cp .env.example .env.local
+npm run dev            # http://localhost:3000 — the API must be running on :8000
 ```
-Scripts: `npm run build`, `npm run start`, `npm run lint`, `npm run typecheck`, `npm run format`.
 
-## Structure
-See `CLAUDE.md` for the folder map and conventions.
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_API_URL` | API base, e.g. `https://api.chobbar.shop/api/v1` |
+| `NEXT_PUBLIC_WS_URL` | WebSocket base, e.g. `wss://api.chobbar.shop/ws` |
+| `NEXT_PUBLIC_SITE_URL` | Public site URL, e.g. `https://chobbar.shop` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth web client id (enables "Continue with Google") |
+| `INTERNAL_API_TOKEN` | Server-only secret shared with the API so server-side rendering is not rate-limited |
+
+## Checks
+```bash
+npm run typecheck && npm run lint && npm run build
+```
+
+See `CLAUDE.md` for structure and conventions.

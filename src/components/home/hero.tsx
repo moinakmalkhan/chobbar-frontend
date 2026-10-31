@@ -1,71 +1,193 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowRight, BadgeCheck, Clock3, Shirt } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { getImageProps } from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/i18n/client";
+import { Link } from "@/i18n/link";
+import { cn, mediaUrl } from "@/lib/utils";
+import type { Banner } from "@/types/api";
 
-const stagger = { hidden: { opacity: 0, y: 16 }, show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: 0.08 * i } }) };
-
-export function Hero() {
+/** Art-directed slide: wide image on desktop, portrait on phones, only one ever downloads. */
+function SlideImage({ banner, priority }: { banner: Banner; priority: boolean }) {
+  const common = { alt: banner.title, sizes: "100vw", priority, quality: 80 } as const;
+  const desktop = getImageProps({ ...common, src: mediaUrl(banner.image)!, width: 1920, height: 820 }).props;
+  const mobile = banner.mobile_image
+    ? getImageProps({ ...common, src: mediaUrl(banner.mobile_image)!, width: 900, height: 1200 }).props
+    : null;
   return (
-    <section className="relative overflow-hidden bg-ink-900 text-white">
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute -left-20 top-10 size-[420px] rounded-full bg-brand-500/25 blur-3xl" />
-        <div className="absolute -right-24 bottom-0 size-[520px] rounded-full bg-sky-500/15 blur-3xl" />
-        <svg className="absolute inset-0 size-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0v36" fill="none" stroke="white" strokeWidth="1" /></pattern></defs><rect width="100%" height="100%" fill="url(#grid)" /></svg>
-      </div>
-      <div className="container-x relative grid items-center gap-12 py-16 lg:grid-cols-[1.1fr_1fr] lg:py-24">
-        <div>
-          <motion.span custom={0} variants={stagger} initial="hidden" animate="show" className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-ink-200">
-            <BadgeCheck className="size-3.5 text-brand-400" /> Manufacturer-direct · Sialkot, Pakistan
-          </motion.span>
-          <motion.h1 custom={1} variants={stagger} initial="hidden" animate="show" className="mt-5 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-balance sm:text-5xl lg:text-6xl">
-            Custom teamwear, priced <span className="text-brand-400">live</span>. Built for clubs that order in bulk.
-          </motion.h1>
-          <motion.p custom={2} variants={stagger} initial="hidden" animate="show" className="mt-5 max-w-xl text-base text-ink-300 sm:text-lg">
-            Pick a fabric from real Pakistani mills, enter sizes per gender, and see your wholesale price change instantly. Request quotes, pay on terms, and track every order from cutting table to doorstep.
-          </motion.p>
-          <motion.div custom={3} variants={stagger} initial="hidden" animate="show" className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" asChild><Link href="/products">Browse the catalog <ArrowRight /></Link></Button>
-            <Button size="lg" variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" asChild><Link href="/register">Open a wholesale account</Link></Button>
-          </motion.div>
-          <motion.dl custom={4} variants={stagger} initial="hidden" animate="show" className="mt-10 grid grid-cols-3 gap-4 border-t border-white/10 pt-6 text-sm">
-            {[["10 pcs", "minimum order"], ["15+", "mill fabrics"], ["18–28 days", "typical lead time"]].map(([v, l]) => (
-              <div key={l}><dt className="font-display text-xl font-bold text-white sm:text-2xl">{v}</dt><dd className="text-ink-400">{l}</dd></div>
-            ))}
-          </motion.dl>
-        </div>
+    <picture>
+      {mobile ? <source media="(max-width: 767px)" srcSet={mobile.srcSet} sizes="100vw" /> : null}
+      <source media="(min-width: 768px)" srcSet={desktop.srcSet} sizes="100vw" />
+      {/* eslint-disable-next-line jsx-a11y/alt-text -- alt comes from getImageProps */}
+      <img {...desktop} className="absolute inset-0 size-full object-cover" />
+    </picture>
+  );
+}
 
-        <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.5 }} className="relative mx-auto w-full max-w-md lg:max-w-none">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur">
-            <div className="flex items-center justify-between text-xs text-ink-300"><span className="inline-flex items-center gap-1.5"><Shirt className="size-3.5 text-brand-400" /> Pro Match Soccer Jersey</span><span className="inline-flex items-center gap-1"><Clock3 className="size-3.5" /> 21 days</span></div>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-              {[["Interlock", "$6.35", false], ["Bird-Eye", "$6.90", true], ["Dot-Knit", "$7.40", false]].map(([name, price, active]) => (
-                <div key={name as string} className={`rounded-xl border p-2.5 ${active ? "border-brand-400 bg-brand-500/15" : "border-white/10 bg-white/5"}`}><p className="font-semibold text-white">{name}</p><p className="text-ink-300">{price}</p></div>
-              ))}
+export function Hero({ banners }: { banners: Banner[] }) {
+  const { t } = useI18n();
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touch = useRef<number | null>(null);
+  const count = banners.length;
+  const go = useCallback((i: number) => setIndex(((i % count) + count) % count), [count]);
+
+  useEffect(() => {
+    if (count < 2 || paused) return;
+    const id = setTimeout(() => go(index + 1), 6500);
+    return () => clearTimeout(id);
+  }, [index, paused, count, go]);
+
+  if (!count) return <HeroFallback />;
+
+  return (
+    <section
+      aria-roledescription="carousel"
+      aria-label={t("home.heroEyebrow")}
+      className="bg-ink-950 relative isolate overflow-hidden text-white"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
+      onTouchEnd={(e) => {
+        if (touch.current === null) return;
+        const dx = e.changedTouches[0].clientX - touch.current;
+        const rtl = document.documentElement.dir === "rtl";
+        if (Math.abs(dx) > 50) go(index + (dx < 0 !== rtl ? 1 : -1));
+        touch.current = null;
+      }}
+    >
+      <div className="relative h-[78svh] max-h-[760px] min-h-[520px] md:h-[min(70vh,680px)]">
+        {banners.map((b, i) => (
+          <div
+            key={b.id}
+            aria-hidden={i !== index}
+            className={cn(
+              "absolute inset-0 transition-opacity duration-1000 ease-out",
+              i === index ? "z-10 opacity-100" : "z-0 opacity-0",
+            )}
+          >
+            <div className={cn("absolute inset-0 rtl:-scale-x-100", i === index && "animate-ken")}>
+              <SlideImage banner={b} priority={i === 0} />
             </div>
-            <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
-              <table className="w-full text-xs">
-                <thead className="bg-white/5 text-ink-300"><tr><th className="px-2 py-1.5 text-left font-medium">Size</th>{["S", "M", "L", "XL", "2XL"].map((s) => <th key={s} className="px-2 py-1.5 font-medium">{s}</th>)}</tr></thead>
-                <tbody>
-                  {[["Men", [4, 10, 12, 8, 2]], ["Women", [6, 8, 4, 0, 0]]].map(([g, q]) => (
-                    <tr key={g as string} className="border-t border-white/10"><td className="px-2 py-1.5 text-left text-ink-300">{g as string}</td>{(q as number[]).map((n, i) => <td key={i} className="px-2 py-1.5 text-center font-semibold text-white">{n || "–"}</td>)}</tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex items-end justify-between">
-              <div><p className="text-xs text-ink-300">54 pieces · 5% volume discount</p><p className="font-display text-2xl font-bold">$352.08</p></div>
-              <span className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold">Add to order</span>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent md:bg-gradient-to-r md:from-black/60 md:via-black/15 md:to-transparent rtl:md:bg-gradient-to-l" />
+            <div className="container-x relative flex h-full items-end pb-20 md:items-center md:pb-0">
+              {i === index ? (
+                <div className="max-w-xl">
+                  {b.eyebrow ? (
+                    <p className="animate-rise mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-[0.18em] uppercase backdrop-blur-sm">
+                      <span className="bg-brand-500 size-1.5 rounded-full" />
+                      {b.eyebrow}
+                    </p>
+                  ) : null}
+                  <h1 className="font-display animate-rise text-4xl leading-[1.05] font-extrabold text-balance [animation-delay:80ms] sm:text-5xl lg:text-6xl">
+                    {b.title}
+                  </h1>
+                  {b.subtitle ? (
+                    <p className="animate-rise mt-4 max-w-md text-base text-pretty text-white/80 [animation-delay:160ms] sm:text-lg">
+                      {b.subtitle}
+                    </p>
+                  ) : null}
+                  <div className="animate-rise mt-8 flex flex-wrap gap-3 [animation-delay:240ms]">
+                    <Button asChild size="lg" variant="white">
+                      <Link href={b.cta_url || "/products"}>
+                        {b.cta_label || t("common.shopNow")}
+                        <ArrowRight className="rtl-flip" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
-          <div className="absolute -right-4 -top-5 hidden rounded-2xl border border-white/10 bg-ink-800 px-4 py-3 text-xs shadow-xl sm:block">
-            <p className="font-semibold text-emerald-400">● Order LS-240609 shipped</p>
-            <p className="text-ink-300">DHL · 3 days to Manchester</p>
+        ))}
+      </div>
+      {count > 1 ? (
+        <div className="container-x absolute inset-x-0 bottom-6 z-20 flex items-center justify-between">
+          <div className="flex gap-2" role="tablist">
+            {banners.map((b, i) => (
+              <button
+                key={b.id}
+                type="button"
+                role="tab"
+                aria-selected={i === index}
+                aria-label={`${i + 1} / ${count}`}
+                onClick={() => go(i)}
+                className="relative h-1.5 w-10 overflow-hidden rounded-full bg-white/25"
+              >
+                <span
+                  key={`${index}-${paused}`}
+                  className={cn(
+                    "absolute inset-y-0 start-0 rounded-full bg-white",
+                    i === index
+                      ? paused
+                        ? "w-full"
+                        : "w-full origin-left animate-[grow_6.5s_linear_both] rtl:origin-right"
+                      : i < index
+                        ? "w-full"
+                        : "w-0",
+                  )}
+                />
+              </button>
+            ))}
           </div>
-        </motion.div>
+          <div className="hidden gap-2 md:flex">
+            <button
+              type="button"
+              onClick={() => go(index - 1)}
+              aria-label={t("common.previous")}
+              className="grid size-11 place-items-center rounded-full border border-white/25 transition-colors hover:bg-white/10"
+            >
+              <ChevronLeft className="rtl-flip size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => go(index + 1)}
+              aria-label={t("common.next")}
+              className="grid size-11 place-items-center rounded-full border border-white/25 transition-colors hover:bg-white/10"
+            >
+              <ChevronRight className="rtl-flip size-5" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function HeroFallback() {
+  const { t } = useI18n();
+  return (
+    <section className="bg-ink-950 relative overflow-hidden text-white">
+      <div
+        aria-hidden
+        className="bg-brand-600/40 absolute -end-40 top-1/2 size-[640px] -translate-y-1/2 rounded-full blur-3xl"
+      />
+      <div className="container-x relative py-28 md:py-40">
+        <p className="text-brand-300 animate-rise mb-4 text-xs font-semibold tracking-[0.18em] uppercase">
+          {t("home.heroEyebrow")}
+        </p>
+        <h1 className="font-display animate-rise max-w-2xl text-4xl leading-[1.05] font-extrabold [animation-delay:80ms] sm:text-6xl">
+          {t("home.heroTitle")}
+        </h1>
+        <p className="animate-rise mt-5 max-w-lg text-lg text-white/75 [animation-delay:160ms]">
+          {t("home.heroSubtitle")}
+        </p>
+        <div className="animate-rise mt-8 flex flex-wrap gap-3 [animation-delay:240ms]">
+          <Button asChild size="lg" variant="white">
+            <Link href="/collections/new-arrivals">{t("home.heroCta")}</Link>
+          </Button>
+          <Button
+            asChild
+            size="lg"
+            variant="outline"
+            className="border-white/30 bg-transparent text-white hover:bg-white/10"
+          >
+            <Link href="/collections/sale">{t("home.heroCta2")}</Link>
+          </Button>
+        </div>
       </div>
     </section>
   );

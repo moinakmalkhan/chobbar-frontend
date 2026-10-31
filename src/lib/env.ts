@@ -6,9 +6,11 @@ export const env = {
 } as const;
 
 export const SITE = {
-  name: "Leepa Sports",
-  tagline: "Wholesale teamwear, made in Sialkot",
-  supportEmail: "sales@leepasports.com",
-  phone: "+92 52 000 0000",
+  name: "Chobbar",
+  domain: "chobbar.shop",
+  supportEmail: "support@chobbar.shop",
+  phone: "+92 300 0000000",
+  whatsapp: "923000000000",
+  instagram: "https://instagram.com/chobbar.shop",
   address: "Sialkot, Punjab, Pakistan",
 } as const;

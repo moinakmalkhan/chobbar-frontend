@@ -20,5 +20,8 @@ export const useUIStore = create<UIState>()((set) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setMobileNavOpen: (mobileNavOpen) => set({ mobileNavOpen }),
   setChatOpen: (chatOpen, conversationId) =>
-    set((s) => ({ chatOpen, activeConversationId: conversationId === undefined ? s.activeConversationId : conversationId })),
+    set((s) => ({
+      chatOpen,
+      activeConversationId: conversationId === undefined ? s.activeConversationId : conversationId,
+    })),
 }));

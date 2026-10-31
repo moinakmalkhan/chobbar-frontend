@@ -1,60 +1,111 @@
 "use client";
 
-import { ArrowRight, ShoppingBag } from "lucide-react";
-import Link from "next/link";
+import { Lock, ShoppingBag } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 import { CartLine } from "@/components/cart/cart-line";
+import { CartTotals } from "@/components/cart/cart-totals";
+import { CouponForm } from "@/components/cart/coupon-form";
+import { FreeDeliveryProgress } from "@/components/cart/free-delivery";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCart, useCartMutations } from "@/hooks/use-cart";
-import { formatMoney } from "@/lib/format";
+import { useCart } from "@/hooks/use-cart";
+import { useI18n } from "@/i18n/client";
+import { Link } from "@/i18n/link";
 import { useCartStore } from "@/stores/cart-store";
 
 export function CartDrawer() {
   const open = useCartStore((s) => s.drawerOpen);
   const close = useCartStore((s) => s.closeDrawer);
-  const { data: cart, isLoading } = useCart({ enabled: open });
-  const { remove } = useCartMutations();
-  const items = cart?.items ?? [];
+  const { data: cart, isLoading } = useCart();
+  const { t, number } = useI18n();
+  const pathname = usePathname();
+  useEffect(() => close(), [pathname, close]);
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent side="right" className="gap-0 p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="flex items-center gap-2">
-            <ShoppingBag className="size-5 text-brand-500" /> Your order
-            {cart?.quantity ? <span className="text-sm font-normal text-muted-foreground">· {cart.quantity} pcs</span> : null}
-          </DialogTitle>
-          <DialogDescription>Prices update automatically with your quantities and fabrics.</DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-5">
-          {isLoading && !cart ? (
-            <div className="space-y-4 py-5">{[0, 1].map((i) => <Skeleton key={i} className="h-24 w-full" />)}</div>
-          ) : items.length ? (
-            <div className="divide-y divide-border">
-              {items.map((item) => (
-                <CartLine key={item.id} item={item} currency={cart!.currency} compact onRemove={(id) => remove.mutate(id)} busy={remove.isPending} />
+    <Dialog open={open} onOpenChange={(v) => !v && close()}>
+      <DialogContent
+        side="end"
+        className="gap-0 p-0"
+        closeLabel={t("common.close")}
+        aria-describedby={undefined}
+      >
+        <div className="border-border flex h-16 shrink-0 items-center gap-2 border-b px-5">
+          <DialogTitle className="text-lg">{t("cart.title")}</DialogTitle>
+          {cart?.quantity ? (
+            <span className="bg-muted rounded-full px-2 py-0.5 text-xs font-semibold">
+              {number(cart.quantity)}
+            </span>
+          ) : null}
+        </div>
+        {isLoading ? (
+          <div className="space-y-5 p-5">
+            {[0, 1].map((i) => (
+              <div key={i} className="flex gap-3">
+                <Skeleton className="h-[120px] w-24" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !cart || cart.items.length === 0 ? (
+          <EmptyState
+            icon={ShoppingBag}
+            title={t("cart.empty")}
+            description={t("cart.emptyHint")}
+            className="flex-1"
+            action={
+              <Button asChild onClick={close}>
+                <Link href="/collections/new-arrivals">{t("common.shopNow")}</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            <div className="flex-1 space-y-5 overflow-y-auto overscroll-contain p-5">
+              <FreeDeliveryProgress
+                subtotal={cart.subtotal - cart.discount}
+                freeShipping={cart.free_shipping}
+              />
+              {cart.issues.length ? (
+                <div className="rounded-2xl bg-amber-50 p-3 text-xs font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                  {cart.issues.map((i) => (
+                    <p key={i}>{i}</p>
+                  ))}
+                </div>
+              ) : null}
+              {cart.items.map((item) => (
+                <CartLine key={item.id} item={item} compact onNavigate={close} />
               ))}
             </div>
-          ) : (
-            <EmptyState icon={ShoppingBag} title="Your cart is empty" description="Configure a product — pick a fabric, enter sizes per gender — and it will show up here with live pricing." action={<Button onClick={close} asChild><Link href="/products">Browse products</Link></Button>} className="my-6 border-0" />
-          )}
-        </div>
-        {items.length ? (
-          <div className="border-t border-border bg-surface p-5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal (ex-works)</span>
-              <span className="text-lg font-bold tabular-nums">{formatMoney(cart!.subtotal, cart!.currency)}</span>
+            <div className="border-border bg-background safe-bottom shrink-0 space-y-4 border-t p-5">
+              <CouponForm cart={cart} />
+              <CartTotals
+                subtotal={cart.subtotal}
+                discount={cart.discount}
+                freeShipping={cart.free_shipping}
+              />
+              <div className="grid gap-2">
+                <Button asChild size="lg" className="w-full">
+                  <Link href="/checkout" onClick={close}>
+                    <Lock />
+                    {t("cart.checkout")}
+                  </Link>
+                </Button>
+                <Button asChild variant="ghost" className="w-full">
+                  <Link href="/cart" onClick={close}>
+                    {t("cart.viewBag")}
+                  </Link>
+                </Button>
+              </div>
             </div>
-            {Number(cart!.savings) > 0 ? <p className="mt-0.5 text-xs text-emerald-600">You're saving {formatMoney(cart!.savings, cart!.currency)} with volume pricing.</p> : null}
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Button variant="outline" asChild onClick={close}><Link href="/cart">Review cart</Link></Button>
-              <Button asChild onClick={close}><Link href="/checkout">Checkout <ArrowRight /></Link></Button>
-            </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">Prefer a negotiated price? <Link href="/cart" onClick={close} className="font-medium text-brand-600 underline">Request a quote</Link> from the cart.</p>
-          </div>
-        ) : null}
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

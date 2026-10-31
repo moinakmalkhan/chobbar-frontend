@@ -26,7 +26,9 @@ export const useCartStore = create<CartState>()(
       closeDrawer: () => set({ drawerOpen: false }),
     }),
     {
-      name: "leepa.cart",
+      name: "chobbar.cart",
+      // Rehydrated after mount (see Providers) so server HTML and the first client render match.
+      skipHydration: true,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ guestToken: s.guestToken, sessionKey: s.sessionKey }),
     },

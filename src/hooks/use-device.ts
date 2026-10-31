@@ -14,16 +14,29 @@ const SERVER: DeviceInfo = { lowEnd: false, reducedMotion: false, isMobile: fals
 let cached: DeviceInfo | null = null;
 
 function detect(): DeviceInfo {
-  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean; effectiveType?: string } };
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+    connection?: { saveData?: boolean; effectiveType?: string };
+  };
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const lowCores = (nav.hardwareConcurrency ?? 8) <= 4;
   const lowMemory = (nav.deviceMemory ?? 8) <= 4;
-  const saveData = Boolean(nav.connection?.saveData) || ["slow-2g", "2g", "3g"].includes(nav.connection?.effectiveType ?? "");
-  return { lowEnd: reducedMotion || saveData || (lowCores && lowMemory), reducedMotion, isMobile: window.innerWidth < 768, ready: true };
+  const saveData =
+    Boolean(nav.connection?.saveData) ||
+    ["slow-2g", "2g", "3g"].includes(nav.connection?.effectiveType ?? "");
+  return {
+    lowEnd: reducedMotion || saveData || (lowCores && lowMemory),
+    reducedMotion,
+    isMobile: window.innerWidth < 768,
+    ready: true,
+  };
 }
 
 function subscribe(onChange: () => void) {
-  const queries = [window.matchMedia("(max-width: 767px)"), window.matchMedia("(prefers-reduced-motion: reduce)")];
+  const queries = [
+    window.matchMedia("(max-width: 767px)"),
+    window.matchMedia("(prefers-reduced-motion: reduce)"),
+  ];
   const handler = () => {
     cached = null;
     onChange();

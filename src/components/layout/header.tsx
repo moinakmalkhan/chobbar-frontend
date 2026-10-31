@@ -1,45 +1,124 @@
 "use client";
 
-import { Bell, ChevronDown, Menu, Search, ShoppingBag } from "lucide-react";
-import Link from "next/link";
+import { Heart, Menu, Search, ShoppingBag } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { Logo } from "@/components/layout/logo";
-import { MegaMenu, MobileNav } from "@/components/layout/nav";
-import { SearchCommand } from "@/components/layout/search-command";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
-import { useCart } from "@/hooks/use-cart";
-import { useCategories } from "@/hooks/use-catalog";
-import { useUnreadCount } from "@/hooks/use-notifications";
+import { SmartImage } from "@/components/shared/smart-image";
+import { useCartCount, useWishlist } from "@/hooks/use-cart";
+import { useCategories, useStorefront } from "@/hooks/use-catalog";
+import { useI18n } from "@/i18n/client";
+import { Link, stripLocale } from "@/i18n/link";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
 import { useUIStore } from "@/stores/ui-store";
+import type { CategoryNode, Storefront } from "@/types/api";
 
-export function Header() {
-  const pathname = usePathname();
-  const { isAuthenticated, hydrated, company } = useAuth();
-  const { data: categories } = useCategories();
-  const { data: cart } = useCart();
-  const { data: unread } = useUnreadCount();
+function AnnouncementBar({ storefront }: { storefront?: Storefront }) {
+  const items = storefront?.announcements ?? [];
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (items.length < 2) return;
+    const id = setInterval(() => setI((n) => (n + 1) % items.length), 5000);
+    return () => clearInterval(id);
+  }, [items.length]);
+  if (!items.length) return null;
+  const item = items[i % items.length];
+  return (
+    <div className="bg-ink-950 text-white">
+      <div className="container-x flex h-9 items-center justify-center overflow-hidden text-center text-xs font-medium sm:text-[13px]">
+        <p key={item.id} className="animate-in fade-in slide-in-from-bottom-2 truncate">
+          {item.url ? (
+            <Link href={item.url} className="hover:underline">
+              {item.text}
+            </Link>
+          ) : (
+            item.text
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MegaMenu({ category }: { category: CategoryNode }) {
+  const { t } = useI18n();
+  return (
+    <div className="border-border bg-background pointer-events-none invisible absolute inset-x-0 top-full -translate-y-1 border-b opacity-0 shadow-xl transition-all duration-200 group-focus-within/nav:pointer-events-auto group-focus-within/nav:visible group-focus-within/nav:translate-y-0 group-focus-within/nav:opacity-100 group-hover/nav:pointer-events-auto group-hover/nav:visible group-hover/nav:translate-y-0 group-hover/nav:opacity-100">
+      <div className="container-x grid grid-cols-[1fr_auto] gap-10 py-8">
+        <div>
+          <Link
+            href={`/categories/${category.slug}`}
+            className="font-display hover:text-brand-700 dark:hover:text-brand-400 text-lg font-bold"
+          >
+            {t("nav.shopAll", { name: category.name })}
+          </Link>
+          <ul className="mt-4 grid grid-cols-2 gap-x-10 gap-y-2.5 sm:grid-cols-3">
+            {category.children.map((c) => (
+              <li key={c.slug}>
+                <Link
+                  href={`/categories/${c.slug}`}
+                  className="group/link text-foreground/80 hover:text-foreground flex items-baseline gap-2 text-sm transition-colors"
+                >
+                  <span className="relative after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:origin-left after:scale-x-0 after:bg-current after:transition-transform group-hover/link:after:scale-x-100 rtl:after:origin-right">
+                    {c.name}
+                  </span>
+                  <span className="text-muted-foreground text-xs">{c.product_count}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {category.image ? (
+          <Link
+            href={`/categories/${category.slug}`}
+            className="group/img block w-56 overflow-hidden rounded-2xl"
+          >
+            <SmartImage
+              src={category.image}
+              alt={category.name}
+              width={224}
+              height={224}
+              wrapperClassName="aspect-square"
+              className="transition-transform duration-700 group-hover/img:scale-105"
+            />
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function Header({
+  initialCategories,
+  initialStorefront,
+}: {
+  initialCategories?: CategoryNode[] | null;
+  initialStorefront?: Storefront | null;
+}) {
+  const { t, number } = useI18n();
+  const pathname = stripLocale(usePathname());
+  const categories = useCategories(initialCategories).data ?? [];
+  const storefront = useStorefront(initialStorefront).data;
+  const count = useCartCount();
+  const wishlistCount = useWishlist().count;
   const openDrawer = useCartStore((s) => s.openDrawer);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
+  const sentinel = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
+  // ⌘K / Ctrl+K and "/" open search from anywhere.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      const typing =
+        e.target instanceof HTMLElement &&
+        (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
+      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
         e.preventDefault();
         setSearchOpen(true);
       }
@@ -48,81 +127,120 @@ export function Header() {
     return () => window.removeEventListener("keydown", onKey);
   }, [setSearchOpen]);
 
-  const quantity = cart?.quantity ?? 0;
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setScrolled(!e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const menu = categories.filter((c) => c.show_in_menu);
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <header className={cn("no-print sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70", scrolled ? "border-border shadow-xs" : "border-transparent")}>
-      {/* Utility bar */}
-      <div className="hidden border-b border-border/60 bg-ink-900 text-xs text-ink-200 lg:block">
-        <div className="container-x flex h-9 items-center justify-between">
-          <p>
-            Wholesale only · MOQ from 10 pieces · Mixed sizes & genders allowed · Ships worldwide from Sialkot
-          </p>
-          <div className="flex items-center gap-5">
-            <Link href="/track" className="hover:text-white">Track order</Link>
-            <Link href="/quick-order" className="hover:text-white">Quick order</Link>
-            <Link href="/how-it-works" className="hover:text-white">How it works</Link>
-            {hydrated && isAuthenticated && company ? <span className="text-brand-300">{company.name}</span> : null}
+    <>
+      <AnnouncementBar storefront={storefront} />
+      <div ref={sentinel} aria-hidden className="h-px" />
+      <header
+        className={cn(
+          "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-300",
+          scrolled
+            ? "border-border bg-[var(--header)] shadow-[0_8px_30px_-20px_rgb(0_0_0/0.25)] backdrop-blur-md"
+            : "bg-background border-transparent",
+        )}
+      >
+        <div className="container-x flex h-16 items-center gap-2 lg:h-[72px]">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label={t("nav.menu")}
+            className="hover:bg-muted -ms-2 grid size-10 place-items-center rounded-full lg:hidden"
+          >
+            <Menu className="size-5" />
+          </button>
+          <Link href="/" aria-label="Chobbar" className="shrink-0 transition-opacity hover:opacity-80">
+            <Logo className="h-7 sm:h-8" />
+          </Link>
+
+          <nav aria-label={t("nav.shop")} className="ms-6 hidden h-full items-stretch lg:flex">
+            {menu.map((c) => (
+              <div key={c.slug} className="group/nav static flex">
+                <Link
+                  href={`/categories/${c.slug}`}
+                  className={cn(
+                    "hover:text-brand-700 dark:hover:text-brand-400 relative flex items-center px-3.5 text-sm font-semibold transition-colors",
+                    "after:bg-brand-600 after:absolute after:inset-x-3.5 after:bottom-0 after:h-0.5 after:scale-x-0 after:rounded-full after:transition-transform group-hover/nav:after:scale-x-100",
+                    isActive(`/categories/${c.slug}`) && "after:scale-x-100",
+                  )}
+                >
+                  {c.name}
+                </Link>
+                {c.children.length ? <MegaMenu category={c} /> : null}
+              </div>
+            ))}
+            <Link
+              href="/collections/sale"
+              className="text-brand-600 hover:text-brand-700 dark:text-brand-400 flex items-center px-3.5 text-sm font-bold transition-colors"
+            >
+              {t("nav.sale")}
+            </Link>
+          </nav>
+
+          <div className="ms-auto flex items-center gap-0.5 sm:gap-1">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="border-border bg-muted/60 text-muted-foreground hover:border-foreground/20 hidden h-10 w-52 items-center gap-2 rounded-full border px-3.5 text-sm transition-colors xl:flex"
+            >
+              <Search className="size-4" />
+              <span className="flex-1 truncate text-start">{t("common.search")}</span>
+              <kbd className="border-border bg-background rounded border px-1.5 text-[10px]" dir="ltr">
+                ⌘K
+              </kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label={t("common.search")}
+              className="hover:bg-muted grid size-10 place-items-center rounded-full xl:hidden"
+            >
+              <Search className="size-[19px]" />
+            </button>
+            <LanguageSwitcher className="hidden md:inline-flex" compact />
+            <ThemeToggle className="hidden md:grid" />
+            <Link
+              href="/wishlist"
+              aria-label={t("nav.wishlist")}
+              className="hover:bg-muted relative hidden size-10 place-items-center rounded-full sm:grid"
+            >
+              <Heart className="size-[19px]" />
+              {wishlistCount > 0 ? (
+                <span className="bg-ink-900 dark:text-ink-900 absolute end-0.5 top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10px] leading-[18px] font-bold text-white dark:bg-white">
+                  {number(wishlistCount)}
+                </span>
+              ) : null}
+            </Link>
+            <UserMenu />
+            <button
+              type="button"
+              onClick={openDrawer}
+              aria-label={`${t("nav.bag")} (${count})`}
+              className="hover:bg-muted relative grid size-10 place-items-center rounded-full"
+            >
+              <ShoppingBag className="size-[19px]" />
+              {count > 0 ? (
+                <span
+                  key={count}
+                  className="bg-brand-600 animate-pop absolute end-0.5 top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10px] leading-[18px] font-bold text-white"
+                >
+                  {count > 99 ? "99+" : number(count)}
+                </span>
+              ) : null}
+            </button>
           </div>
         </div>
-      </div>
-
-      <div className="container-x flex h-16 items-center gap-3">
-        <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
-          <Menu />
-        </Button>
-        <Logo className="mr-2" />
-
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
-          <MegaMenu categories={categories ?? []} />
-          <NavLink href="/products" active={pathname === "/products"}>All products</NavLink>
-          <NavLink href="/fabrics" active={pathname.startsWith("/fabrics")}>Fabrics</NavLink>
-          <NavLink href="/how-it-works" active={pathname.startsWith("/how-it-works")}>How it works</NavLink>
-        </nav>
-
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          className="ml-auto hidden h-10 w-full max-w-xs items-center gap-2 rounded-xl border border-border bg-muted/60 px-3 text-sm text-muted-foreground transition-colors hover:border-ink-300 hover:bg-muted md:flex"
-        >
-          <Search className="size-4" />
-          <span className="flex-1 text-left">Search jerseys, hoodies, SKUs…</span>
-          <kbd className="hidden rounded-md border border-border bg-background px-1.5 py-0.5 font-sans text-[10px] font-medium lg:inline">⌘K</kbd>
-        </button>
-
-        <div className="ml-auto flex items-center gap-1 md:ml-0">
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSearchOpen(true)} aria-label="Search">
-            <Search />
-          </Button>
-          <ThemeToggle />
-          {hydrated && isAuthenticated ? (
-            <Button variant="ghost" size="icon" asChild aria-label="Notifications">
-              <Link href="/account/notifications" className="relative">
-                <Bell />
-                {unread ? <span className="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">{unread > 9 ? "9+" : unread}</span> : null}
-              </Link>
-            </Button>
-          ) : null}
-          <Button variant="ghost" size="icon" onClick={openDrawer} aria-label={`Cart, ${quantity} pieces`} className="relative">
-            <ShoppingBag />
-            {quantity ? <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink-900 px-1 text-[10px] font-bold text-white dark:bg-brand-500">{quantity > 999 ? "999+" : quantity}</span> : null}
-          </Button>
-          <UserMenu />
-        </div>
-      </div>
-
-      <SearchCommand />
-      <MobileNav categories={categories ?? []} />
-    </header>
+      </header>
+    </>
   );
 }
-
-function NavLink({ href, active, children }: { href: string; active?: boolean; children: React.ReactNode }) {
-  return (
-    <Link href={href} className={cn("rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted", active ? "text-brand-600 dark:text-brand-400" : "text-foreground/80")}>
-      {children}
-    </Link>
-  );
-}
-
-export { ChevronDown };

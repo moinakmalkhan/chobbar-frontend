@@ -1,33 +1,30 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
-import { ProductGrid } from "@/components/catalog/product-grid";
-import { queryKeys } from "@/lib/query-client";
-import { catalogService } from "@/services/catalog";
-import { searchService } from "@/services/search";
+import { ProductRail } from "@/components/catalog/product-rail";
+import { SectionHeading } from "@/components/shared/section";
+import { useRecommendations, useRelated } from "@/hooks/use-catalog";
+import { useI18n } from "@/i18n/client";
 
 export function RelatedProducts({ slug }: { slug: string }) {
-  const related = useQuery({ queryKey: queryKeys.related(slug), queryFn: () => catalogService.related(slug), staleTime: 15 * 60_000 });
-  const together = useQuery({ queryKey: queryKeys.recommendations(slug), queryFn: () => searchService.recommendations(slug), staleTime: 15 * 60_000 });
-  const togetherIds = new Set((together.data ?? []).map((p) => p.id));
-  const relatedOnly = (related.data ?? []).filter((p) => !togetherIds.has(p.id));
+  const { t } = useI18n();
+  const related = useRelated(slug);
+  const together = useRecommendations(slug);
+  const relatedSlugs = new Set((related.data ?? []).map((p) => p.slug));
+  const look = (together.data ?? []).filter((p) => p.slug !== slug && !relatedSlugs.has(p.slug));
   return (
-    <div className="mt-16 space-y-14">
-      {together.data?.length ? (
-        <section>
-          <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Frequently ordered together</p>
-          <h2 className="mb-6 mt-1 font-display text-2xl font-bold">Complete the kit</h2>
-          <ProductGrid products={together.data.slice(0, 4)} />
+    <>
+      {look.length >= 2 ? (
+        <section className="container-x pt-16 sm:pt-20">
+          <SectionHeading title={t("product.completeLook")} />
+          <ProductRail products={look} />
         </section>
       ) : null}
-      {relatedOnly.length ? (
-        <section>
-          <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">You may also like</p>
-          <h2 className="mb-6 mt-1 font-display text-2xl font-bold">More from this range</h2>
-          <ProductGrid products={relatedOnly.slice(0, 4)} />
+      {related.isLoading || related.data?.length ? (
+        <section className="container-x pt-16 sm:pt-20">
+          <SectionHeading title={t("product.youMayLike")} />
+          <ProductRail products={related.data} loading={related.isLoading} />
         </section>
       ) : null}
-    </div>
+    </>
   );
 }

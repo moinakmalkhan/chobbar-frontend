@@ -1,75 +1,110 @@
 "use client";
 
-import { Minus, Plus, Trash2 } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
+import { AlertCircle, Trash2 } from "lucide-react";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { formatMoney, GENDER_LABELS } from "@/lib/format";
+import { QuantityStepper } from "@/components/shared/quantity";
+import { SmartImage } from "@/components/shared/smart-image";
+import { useRemoveFromCart, useSetQuantity } from "@/hooks/use-cart";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
+import { useI18n } from "@/i18n/client";
+import { Link } from "@/i18n/link";
 import { cn } from "@/lib/utils";
 import type { CartItem } from "@/types/api";
 
-interface Props {
+export function CartLine({
+  item,
+  compact = false,
+  onNavigate,
+}: {
   item: CartItem;
-  currency: string;
   compact?: boolean;
-  onRemove?: (id: string) => void;
-  onChangeQty?: (item: CartItem, size_id: number, gender: string, quantity: number) => void;
-  busy?: boolean;
-}
+  onNavigate?: () => void;
+}) {
+  const { t, money } = useI18n();
+  const setQty = useSetQuantity();
+  const remove = useRemoveFromCart();
+  // Rapid taps on +/− update the UI optimistically but hit the API once.
+  const [local, setLocal] = useState<number | null>(null);
+  const commit = useDebouncedCallback(
+    (quantity: number) => setQty.mutate({ itemId: item.id, quantity }, { onSettled: () => setLocal(null) }),
+    350,
+  );
+  const qty = local ?? item.quantity;
+  const max = Math.max(1, Math.min(10, item.available || item.quantity));
+  const image = item.product.image?.url;
+  const href = `/products/${item.product.slug}`;
 
-export function CartLine({ item, currency, compact, onRemove, onChangeQty, busy }: Props) {
-  const error = item.price_breakdown?.error;
   return (
-    <div className={cn("flex gap-3", compact ? "py-3" : "py-5")}>
-      <Link href={`/products/${item.product.slug}`} className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-24">
-        {item.product.image ? <Image src={item.product.image.url} alt={item.product.image.alt} fill sizes="96px" className="object-cover" /> : null}
+    <div
+      className={cn(
+        "animate-in fade-in flex gap-3.5",
+        remove.isPending && "pointer-events-none opacity-40 transition-opacity",
+      )}
+    >
+      <Link href={href} onClick={onNavigate} className="shrink-0">
+        <SmartImage
+          src={image}
+          alt={item.product.name}
+          width={96}
+          height={120}
+          wrapperClassName={cn("rounded-xl", compact ? "h-[100px] w-20" : "h-[120px] w-24")}
+        />
       </Link>
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <Link href={`/products/${item.product.slug}`} className="block truncate text-sm font-semibold hover:text-brand-600">{item.product.name}</Link>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {item.fabric_name}{item.color ? ` · ${item.color}` : ""} · {item.product.sku}
+            <Link
+              href={href}
+              onClick={onNavigate}
+              className="hover:text-brand-700 dark:hover:text-brand-400 line-clamp-2 text-sm leading-snug font-semibold"
+            >
+              {item.product.name}
+            </Link>
+            <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
+              {item.variant.color ? (
+                <span
+                  className="size-2.5 rounded-full ring-1 ring-black/10"
+                  style={{ backgroundColor: item.variant.color.hex }}
+                />
+              ) : null}
+              {[item.variant.color?.name, item.variant.size].filter(Boolean).join(" · ")}
             </p>
           </div>
-          {onRemove ? (
-            <Button variant="ghost" size="icon-sm" onClick={() => onRemove(item.id)} aria-label="Remove" disabled={busy} className="-mr-2 text-muted-foreground hover:text-red-600">
-              <Trash2 />
-            </Button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => remove.mutate(item.id)}
+            aria-label={t("cart.remove")}
+            className="text-muted-foreground hover:bg-muted -me-1.5 -mt-1 grid size-8 shrink-0 place-items-center rounded-full transition-colors hover:text-red-600"
+          >
+            <Trash2 className="size-4" />
+          </button>
         </div>
-
-        {!compact ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {item.breakdown.map((line) => (
-              <span key={`${line.gender}-${line.size_id}`} className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs">
-                <span className="text-muted-foreground">{GENDER_LABELS[line.gender]?.slice(0, 1)}</span>
-                <span className="font-semibold">{line.size}</span>
-                {onChangeQty ? (
-                  <span className="ml-1 inline-flex items-center overflow-hidden rounded-md border border-border">
-                    <button type="button" className="px-1 hover:bg-muted disabled:opacity-40" disabled={busy || line.quantity <= 0} onClick={() => onChangeQty(item, line.size_id, line.gender, Math.max(0, line.quantity - 1))} aria-label="Decrease"><Minus className="size-3" /></button>
-                    <span className="min-w-6 text-center tabular-nums">{line.quantity}</span>
-                    <button type="button" className="px-1 hover:bg-muted" disabled={busy} onClick={() => onChangeQty(item, line.size_id, line.gender, line.quantity + 1)} aria-label="Increase"><Plus className="size-3" /></button>
-                  </span>
-                ) : (
-                  <span className="tabular-nums">× {line.quantity}</span>
-                )}
-              </span>
-            ))}
+        {item.issue ? (
+          <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <AlertCircle className="size-3.5" />
+            {item.issue}
+          </p>
+        ) : null}
+        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+          <QuantityStepper
+            size="sm"
+            value={qty}
+            max={max}
+            onChange={(q) => {
+              setLocal(q);
+              commit(q);
+            }}
+          />
+          <div className="text-end">
+            <p className="text-sm font-bold tabular-nums">{money(item.unit_price * qty)}</p>
+            {qty > 1 ? (
+              <p className="text-muted-foreground text-[11px] tabular-nums">
+                {money(item.unit_price)} × {qty}
+              </p>
+            ) : null}
           </div>
-        ) : (
-          <p className="mt-1 text-xs text-muted-foreground">{item.breakdown.map((l) => `${l.size}×${l.quantity}`).join(", ")}</p>
-        )}
-
-        <div className="mt-2 flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            {item.quantity} pcs × {formatMoney(item.unit_price, currency)}
-            {item.price_breakdown?.volume_discount_percent ? <span className="ml-1.5 rounded bg-emerald-50 px-1 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">-{item.price_breakdown.volume_discount_percent}% volume</span> : null}
-          </span>
-          <span className="font-semibold tabular-nums">{formatMoney(item.line_total, currency)}</span>
         </div>
-        {error ? <p className="mt-1 text-xs font-medium text-red-600">{error}</p> : null}
       </div>
     </div>
   );

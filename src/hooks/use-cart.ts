@@ -1,97 +1,158 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
 
+import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/i18n/client";
 import { queryKeys } from "@/lib/query-client";
 import { notify } from "@/lib/toast";
-import { type AddToCartPayload, cartService } from "@/services/cart";
-import { useAuthStore } from "@/stores/auth-store";
+import { cartService } from "@/services/cart";
 import { useCartStore } from "@/stores/cart-store";
+import { useLocalStore } from "@/stores/local-store";
 import type { Cart } from "@/types/api";
 
-export function useCart(options: { enabled?: boolean } = {}) {
-  const hydrated = useAuthStore((s) => s.hydrated);
-  const setGuestToken = useCartStore((s) => s.setGuestToken);
-  const query = useQuery({
-    queryKey: queryKeys.cart,
-    queryFn: cartService.get,
-    enabled: hydrated && (options.enabled ?? true),
-    staleTime: 30_000,
-  });
-  useEffect(() => {
-    if (query.data?.guest_token) setGuestToken(query.data.guest_token);
-  }, [query.data?.guest_token, setGuestToken]);
-  return query;
+/** Persist the guest token the server hands back; drop it once the bag belongs to an account. */
+function remember(cart: Cart) {
+  const store = useCartStore.getState();
+  if (cart.guest_token && cart.guest_token !== store.guestToken) store.setGuestToken(cart.guest_token);
+  if (!cart.guest_token && store.guestToken) store.setGuestToken(null);
+  return cart;
 }
 
-export function useCartMutations() {
+export function useCart() {
+  const { hydrated } = useAuth();
+  const query = useQuery({
+    queryKey: queryKeys.cart,
+    queryFn: () => cartService.get().then(remember),
+    enabled: hydrated,
+    staleTime: 30_000,
+  });
+  // Until device storage has loaded we don't know whose bag it is: show loading, never "empty".
+  // Data is also withheld until then so streamed sections hydrate exactly like the server HTML.
+  return { ...query, data: hydrated ? query.data : undefined, isLoading: query.isLoading || !hydrated };
+}
+
+export function useCartCount() {
+  const { data } = useCart();
+  return data?.quantity ?? 0;
+}
+
+function useCartMutation<V>(fn: (v: V) => Promise<Cart>, opts: { success?: string; silent?: boolean } = {}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: V) => fn(v).then(remember),
+    onSuccess: (cart) => {
+      queryClient.setQueryData(queryKeys.cart, cart);
+      if (opts.success) notify.success(opts.success);
+    },
+    onError: (e) => notify.error(e),
+  });
+}
+
+export function useAddToCart() {
   const queryClient = useQueryClient();
   const openDrawer = useCartStore((s) => s.openDrawer);
-  const setGuestToken = useCartStore((s) => s.setGuestToken);
-
-  const setCart = (cart: Cart) => {
-    queryClient.setQueryData(queryKeys.cart, cart);
-    if (cart.guest_token) setGuestToken(cart.guest_token);
-  };
-
-  const add = useMutation({
-    mutationFn: (payload: AddToCartPayload) => cartService.add(payload),
-    onSuccess: (cart, payload) => {
-      setCart(cart);
-      const qty = payload.breakdown.reduce((n, l) => n + l.quantity, 0);
-      notify.action("Added to cart", `${qty} pieces configured and priced.`, { label: "View cart", onClick: openDrawer });
+  const { t } = useI18n();
+  return useMutation({
+    mutationFn: ({ variant, quantity = 1 }: { variant: string; quantity?: number; name?: string }) =>
+      cartService.add(variant, quantity).then(remember),
+    onSuccess: (cart, vars) => {
+      queryClient.setQueryData(queryKeys.cart, cart);
+      notify.action(t("product.addedToBag"), vars.name ?? "", {
+        label: t("product.viewBag"),
+        onClick: openDrawer,
+      });
     },
-    onError: (e) => notify.error(e, "Couldn't add to cart"),
+    onError: (e) => notify.error(e),
   });
+}
 
-  const update = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<AddToCartPayload> }) => cartService.updateItem(id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.cart });
-      notify.success("Cart updated", "Prices refreshed with your changes.");
-    },
-    onError: (e) => notify.error(e, "Couldn't update item"),
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => cartService.removeItem(id),
-    onMutate: async (id) => {
+/** Quantity changes are optimistic so the stepper feels instant even on slow networks. */
+export function useSetQuantity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, quantity }: { itemId: string; quantity: number }) =>
+      cartService.setQuantity(itemId, quantity).then(remember),
+    onMutate: async ({ itemId, quantity }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.cart });
       const previous = queryClient.getQueryData<Cart>(queryKeys.cart);
       if (previous) {
-        const items = previous.items.filter((i) => i.id !== id);
+        const items = previous.items
+          .map((i) => (i.id === itemId ? { ...i, quantity, line_total: i.unit_price * quantity } : i))
+          .filter((i) => i.quantity > 0);
+        const subtotal = items.reduce((s, i) => s + i.line_total, 0);
         queryClient.setQueryData<Cart>(queryKeys.cart, {
           ...previous,
           items,
+          subtotal,
+          quantity: items.reduce((s, i) => s + i.quantity, 0),
           item_count: items.length,
-          quantity: items.reduce((n, i) => n + i.quantity, 0),
-          subtotal: items.reduce((n, i) => n + Number(i.line_total), 0),
         });
       }
       return { previous };
     },
-    onError: (e, _id, ctx) => {
+    onError: (e, _v, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(queryKeys.cart, ctx.previous);
-      notify.error(e, "Couldn't remove item");
+      notify.error(e);
     },
-    onSuccess: () => notify.success("Removed from cart"),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.cart }),
+    onSuccess: (cart) => queryClient.setQueryData(queryKeys.cart, cart),
   });
+}
 
-  const clear = useMutation({
-    mutationFn: cartService.clear,
+export function useRemoveFromCart() {
+  const { t } = useI18n();
+  return useCartMutation((itemId: string) => cartService.remove(itemId), { success: t("cart.removed") });
+}
+
+export function useApplyCoupon() {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ code, email }: { code: string; email?: string }) =>
+      cartService.applyCoupon(code, email).then(remember),
     onSuccess: (cart) => {
-      setCart(cart);
-      notify.info("Cart cleared");
+      queryClient.setQueryData(queryKeys.cart, cart);
+      if (cart.coupon_code) notify.success(t("cart.couponApplied"), cart.coupon_message);
+      else if (cart.coupon_message) notify.warning(cart.coupon_message);
     },
     onError: (e) => notify.error(e),
   });
+}
 
-  const setNotes = useMutation({
-    mutationFn: (notes: string) => cartService.setNotes(notes),
-    onSuccess: (cart) => setCart(cart),
+export function useRemoveCoupon() {
+  const { t } = useI18n();
+  return useCartMutation(() => cartService.removeCoupon(), { success: t("cart.couponRemoved") });
+}
+
+/** Wishlist: server-backed when signed in, device-local for guests. */
+export function useWishlist() {
+  const { isAuthenticated, hydrated } = useAuth();
+  const local = useLocalStore((s) => s.wishlist);
+  const query = useQuery({
+    queryKey: queryKeys.wishlist,
+    queryFn: cartService.wishlist,
+    enabled: hydrated && isAuthenticated,
+    staleTime: 60_000,
   });
+  const slugs = isAuthenticated ? (query.data?.results.map((r) => r.product.slug) ?? []) : local;
+  return { ...query, slugs, has: (slug: string) => slugs.includes(slug), count: slugs.length };
+}
 
-  return { add, update, remove, clear, setNotes };
+export function useToggleWishlist() {
+  const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
+  const toggleLocal = useLocalStore((s) => s.toggleWishlist);
+  const { t } = useI18n();
+  return useMutation({
+    mutationFn: async ({ slug }: { slug: string; name?: string }) => {
+      if (!isAuthenticated) return { wishlisted: toggleLocal(slug) };
+      return cartService.toggleWishlist(slug);
+    },
+    onSuccess: (res) => {
+      if (isAuthenticated) queryClient.invalidateQueries({ queryKey: queryKeys.wishlist });
+      if (res.wishlisted) notify.success(t("product.savedToWishlist"));
+      else notify.info(t("product.removedFromWishlist"));
+    },
+    onError: (e) => notify.error(e),
+  });
 }

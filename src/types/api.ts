@@ -1,4 +1,4 @@
-/** Shared API types — mirror the Django serializers one-to-one. */
+/** API types — mirror the Django serializers one-to-one. */
 
 export interface Paginated<T> {
   count: number;
@@ -23,44 +23,19 @@ export interface ApiError {
   request_id?: string;
 }
 
-export type Role = "owner" | "admin" | "buyer" | "viewer";
-export type Gender = "men" | "women" | "unisex" | "boys" | "girls" | "youth";
-export type Quality = "economy" | "standard" | "premium" | "elite";
-export type PaymentTerms = "prepaid" | "deposit_50" | "net_15" | "net_30" | "net_60";
-export type PaymentMethod = "bank_transfer" | "net_terms" | "card";
+export type Gender = "men" | "women" | "unisex" | "kids";
+export type PaymentMethod = "cod" | "bank_transfer" | "card";
 export type OrderStatus =
-  | "pending_approval"
-  | "pending_payment"
+  | "pending"
   | "confirmed"
-  | "in_production"
-  | "quality_check"
+  | "processing"
   | "shipped"
+  | "out_for_delivery"
   | "delivered"
   | "completed"
-  | "cancelled";
-export type PaymentStatus = "unpaid" | "deposit_paid" | "paid" | "overdue" | "refunded";
-export type QuoteStatus = "submitted" | "under_review" | "quoted" | "accepted" | "declined" | "expired" | "converted";
-
-export interface CompanyBrief {
-  id: string;
-  name: string;
-  slug: string;
-  business_type: string;
-  country: string;
-  currency: string;
-  payment_terms: PaymentTerms;
-  is_verified: boolean;
-  customer_group: string | null;
-  approval_threshold: number;
-  logo: string | null;
-}
-
-export interface Membership {
-  company: CompanyBrief;
-  role: Role;
-  is_default: boolean;
-  order_limit: number;
-}
+  | "cancelled"
+  | "returned";
+export type PaymentStatus = "unpaid" | "paid" | "cod_pending" | "refunded" | "partially_refunded";
 
 export interface User {
   id: string;
@@ -69,15 +44,18 @@ export interface User {
   last_name: string;
   full_name: string;
   phone: string;
-  job_title: string;
   avatar_url: string;
+  date_of_birth: string | null;
+  shop_for: "" | "men" | "women";
+  language: "en" | "ur" | "ar";
   is_staff: boolean;
   is_email_verified: boolean;
   auth_provider: "email" | "google";
   marketing_opt_in: boolean;
   notification_preferences: Record<string, boolean>;
-  memberships: Membership[];
   has_password: boolean;
+  order_count: number;
+  total_spent: number;
   created_at: string;
 }
 
@@ -87,55 +65,31 @@ export interface AuthResponse {
   user: User;
 }
 
-export interface Company extends CompanyBrief {
-  legal_name: string;
-  tax_id: string;
-  website: string;
-  email: string;
-  phone: string;
-  credit_limit: number;
-  credit_used: number;
-  credit_available: number;
-  member_count: number;
-  created_at: string;
-}
-
-export interface CompanyMember {
-  id: number;
-  email: string;
-  full_name: string;
-  user: User;
-  role: Role;
-  is_active: boolean;
-  order_limit: number;
-  created_at: string;
-}
-
-export interface Invitation {
-  id: string;
-  email: string;
-  role: Role;
-  status: "pending" | "accepted" | "revoked" | "expired";
-  invited_by: string;
-  company: string;
-  expires_at: string;
-  created_at: string;
-}
-
 export interface Address {
   id: string;
-  kind: "shipping" | "billing";
-  label: string;
-  contact_name: string;
-  contact_phone: string;
+  label: "home" | "work" | "other";
+  full_name: string;
+  phone: string;
   line1: string;
   line2: string;
   city: string;
-  state: string;
+  province: string;
   postal_code: string;
   country: string;
   is_default: boolean;
   created_at?: string;
+}
+
+export type AddressInput = Omit<Address, "id" | "created_at" | "label" | "is_default"> &
+  Partial<Pick<Address, "label" | "is_default">>;
+
+export interface LocaleInfo {
+  language: "en" | "ur" | "ar";
+  source: string;
+  country: string;
+  rtl: boolean;
+  currency: string;
+  supported: { code: string; name: string; rtl: boolean }[];
 }
 
 export interface CategoryNode {
@@ -147,6 +101,7 @@ export interface CategoryNode {
   description: string;
   product_count: number;
   depth: number;
+  show_in_menu: boolean;
   children: CategoryNode[];
 }
 
@@ -163,32 +118,28 @@ export interface CategoryDetail {
   product_count: number;
 }
 
-export interface Fabric {
+export interface Collection {
   id: string;
   name: string;
   slug: string;
-  composition: string;
-  gsm: number;
-  quality: Quality;
-  quality_rank: number;
-  price_pkr: number;
-  price_unit: "kg" | "m";
-  width_inches: number;
+  tagline: string;
   description: string;
-  features: string[];
-  best_for: string[];
-  typical_mills: string;
-  is_available_in_pakistan: boolean;
   image: string | null;
-  swatch_color: string;
-  price_updated_at: string | null;
+  is_featured: boolean;
+  product_count: number;
+  starts_at: string | null;
+  ends_at: string | null;
 }
 
-export interface ProductImage {
-  id: number;
+export interface ColorRef {
+  name: string;
+  slug: string;
+  hex: string;
+}
+
+export interface ImageRef {
   url: string;
   alt: string;
-  is_primary: boolean;
   width: number | null;
   height: number | null;
 }
@@ -198,187 +149,184 @@ export interface ProductCard {
   name: string;
   slug: string;
   sku: string;
+  brand: string;
+  gender: Gender;
   category: string;
   category_name: string;
   short_description: string;
-  image: { url: string; alt: string; width: number | null; height: number | null } | null;
-  base_price: number;
+  image: ImageRef | null;
+  hover_image: ImageRef | null;
+  price: number;
   compare_at_price: number | null;
-  min_order_quantity: number;
-  lead_time_days: number;
-  genders: Gender[];
-  colors: string[];
-  base_fabric: string;
+  discount_percent: number;
+  is_on_sale: boolean;
+  in_stock: boolean;
+  rating_avg: number;
+  rating_count: number;
+  colors: ColorRef[];
+  sizes: string[];
   is_featured: boolean;
   is_new: boolean;
-  is_customizable: boolean;
 }
 
-export interface Size {
-  id: number;
+export interface Variant {
+  id: string;
+  sku: string;
+  color: ColorRef | null;
+  size: string | null;
+  size_id: number | null;
+  price: number;
+  stock: number;
+  in_stock: boolean;
+  low_stock: boolean;
   label: string;
-  sort_order: number;
-  surcharge_percent: number;
-  chest_cm: string;
-  length_cm: string;
 }
 
-export interface FabricOption {
-  fabric: Fabric;
-  price_adjustment: number;
-  is_default: boolean;
-  unit_fabric_cost: number | null;
-}
-
-export interface SizeOption {
-  gender: Gender;
-  size: Size;
+export interface ProductImage {
+  id: number;
+  url: string;
+  alt: string;
+  color: string | null;
+  is_primary: boolean;
+  width: number | null;
+  height: number | null;
 }
 
 export interface ProductDetail extends ProductCard {
   description: string;
+  material: string;
+  care_instructions: string;
   specifications: Record<string, string>;
   tags: string[];
   images: ProductImage[];
-  fabric_options: FabricOption[];
-  size_options: SizeOption[];
-  size_group: { id: number; name: string; slug: string; sizes: Size[] };
-  labor_price: number;
-  fabric_consumption_kg: string;
-  order_increment: number;
-  is_made_to_order: boolean;
-  stock_quantity: number;
-  customization_options: {
-    logo_placements?: string[];
-    print_methods?: string[];
-    name_number?: boolean;
-    sponsor_logos?: boolean;
-  };
-  volume_tiers: { min_quantity: number; discount_percent: number }[];
+  variants: Variant[];
+  size_group: {
+    id: number;
+    name: string;
+    slug: string;
+    sizes: { id: number; label: string; sort_order: number }[];
+    guide: Record<string, string>[];
+  } | null;
+  collections: Collection[];
+  weight_grams: number;
+  total_stock: number;
   breadcrumbs: { name: string; slug: string }[];
   meta_title: string;
   meta_description: string;
 }
 
-export interface BreakdownLine {
-  gender: Gender;
-  size_id: number;
-  quantity: number;
-  size?: string;
-}
-
-export interface PriceLine {
-  gender: Gender;
-  size_id: number;
-  size_label: string;
-  quantity: number;
-  surcharge_percent: number;
-  unit_price: number;
-  line_total: number;
-}
-
-export interface PriceBreakdown {
-  currency: string;
-  quantity: number;
-  labor_price: number;
-  fabric_cost: number;
-  fabric_adjustment: number;
-  list_unit_price: number;
-  group_discount_percent: number;
-  volume_discount_percent: number;
-  contract_unit_price: number | null;
-  unit_price: number;
-  subtotal: number;
-  savings: number;
-  lines: PriceLine[];
-  next_tier: { min_quantity: number; discount_percent: number; more_needed: number } | null;
-  error?: string;
+export interface Facets {
+  sizes: { label: string; count: number }[];
+  colors: (ColorRef & { count: number })[];
+  price: { min: number; max: number };
+  genders: { value: Gender; count: number }[];
 }
 
 export interface CartItem {
   id: string;
   product: ProductCard;
-  fabric: string;
-  fabric_name: string;
-  breakdown: BreakdownLine[];
+  variant: Variant;
   quantity: number;
-  color: string;
-  customization: Record<string, unknown>;
-  artwork: string | null;
-  notes: string;
   unit_price: number;
   line_total: number;
-  price_breakdown: PriceBreakdown;
-  updated_at: string;
+  available: number;
+  issue: string;
 }
 
 export interface Cart {
   id: string;
   guest_token: string | null;
-  currency: string;
   items: CartItem[];
   item_count: number;
   quantity: number;
   subtotal: number;
-  savings: number;
+  discount: number;
+  coupon_code: string;
+  coupon_message: string;
+  free_shipping: boolean;
+  issues: string[];
   notes: string;
 }
 
-export interface SavedListItem {
-  id: string;
+export interface WishlistEntry {
   product: ProductCard;
-  fabric: string | null;
-  breakdown: BreakdownLine[];
-  color: string;
-  customization: Record<string, unknown>;
-  notes: string;
+  variant: Variant | null;
+  added_at: string;
 }
 
-export interface SavedList {
-  id: string;
-  name: string;
-  description: string;
-  is_shared: boolean;
-  created_by: string;
-  item_count: number;
-  items: SavedListItem[];
-  updated_at: string;
+export interface WishlistResponse {
+  count: number;
+  results: WishlistEntry[];
+  product_ids: string[];
 }
 
-export interface ShippingMethod {
-  name: string;
-  code: string;
+export interface PaymentMethodOption {
+  code: PaymentMethod;
+  label: string;
   description: string;
-  base_price: number;
-  price_per_kg: number;
+  enabled: boolean;
+}
+
+export interface OrdersSummary {
+  total: number;
+  open: number;
+  delivered: number;
+  returns: number;
+}
+
+export interface CheckoutInput {
+  email: string;
+  address: Omit<AddressSnapshot, "country"> & { country?: string };
+  payment_method: PaymentMethod;
+  notes?: string;
+  save_address?: boolean;
+  is_gift?: boolean;
+}
+
+export interface ProductQuery {
+  page?: number;
+  page_size?: number;
+  ordering?: string;
+  category?: string;
+  collection?: string;
+  gender?: string | string[];
+  size?: string;
+  color?: string;
+  min_price?: number | string;
+  max_price?: number | string;
+  in_stock?: boolean | string;
+  on_sale?: boolean | string;
+  q?: string;
+  ids?: string;
+  slugs?: string;
+}
+
+export interface ShippingQuote {
+  zone: string | null;
+  rate: number;
+  cod_fee: number;
+  is_free: boolean;
+  free_over: number | null;
   min_days: number;
   max_days: number;
+  subtotal: number;
+  discount: number;
+  total: number;
 }
 
 export interface OrderItem {
   id: string;
   product_slug: string | null;
   product_name: string;
+  variant_label: string;
   sku: string;
-  fabric_name: string;
   image_url: string;
-  breakdown: BreakdownLine[];
   quantity: number;
-  color: string;
-  customization: Record<string, unknown>;
-  artwork: string | null;
-  notes: string;
   unit_price: number;
+  compare_at_price: number | null;
   line_total: number;
-  price_breakdown: PriceBreakdown;
-}
-
-export interface OrderHistory {
-  from_status: string;
-  to_status: OrderStatus;
-  note: string;
-  changed_by: string;
-  created_at: string;
+  returned_quantity: number;
+  can_review: boolean;
 }
 
 export interface OrderSummary {
@@ -388,73 +336,78 @@ export interface OrderSummary {
   status_display: string;
   payment_status: PaymentStatus;
   payment_method: PaymentMethod;
-  po_number: string;
   currency: string;
   grand_total: number;
-  amount_paid: number;
-  balance_due: number;
   total_quantity: number;
   item_count: number;
-  placed_by: string;
-  estimated_ship_date: string | null;
+  thumbnails: string[];
+  estimated_delivery: string | null;
   tracking_number: string;
   created_at: string;
 }
 
 export interface AddressSnapshot {
-  contact_name: string;
-  contact_phone: string;
+  full_name: string;
+  phone: string;
   line1: string;
   line2: string;
   city: string;
-  state: string;
+  province: string;
   postal_code: string;
   country: string;
 }
 
+export interface ReturnRequest {
+  id: string;
+  number: string;
+  order_number: string;
+  kind: "refund" | "exchange";
+  status: "requested" | "approved" | "received" | "completed" | "rejected";
+  status_display: string;
+  reason: string;
+  reason_display: string;
+  details: string;
+  image: string | null;
+  items: {
+    order_item: string;
+    product_name: string;
+    variant_label: string;
+    quantity: number;
+    exchange_variant: string | null;
+  }[];
+  refund_amount: number;
+  refund_method: string;
+  staff_notes: string;
+  resolved_at: string | null;
+  created_at: string;
+}
+
 export interface Order extends OrderSummary {
-  company: string;
+  email: string;
+  phone: string;
   items: OrderItem[];
-  history: OrderHistory[];
-  shipping_method: ShippingMethod | null;
+  history: { from_status: string; to_status: OrderStatus; note: string; created_at: string }[];
   subtotal: number;
   discount_total: number;
   shipping_total: number;
-  tax_total: number;
+  cod_fee: number;
+  refunded_total: number;
+  coupon_code: string;
+  shipping_zone: { name: string; min_days: number; max_days: number } | null;
   shipping_address: AddressSnapshot;
-  billing_address: AddressSnapshot;
   carrier: string;
   tracking_url: string;
   customer_notes: string;
-  requested_delivery_date: string | null;
-  due_date: string | null;
-  payment_terms: PaymentTerms;
-  approved_by: string;
-  approved_at: string | null;
+  is_gift: boolean;
+  cancel_reason: string;
   confirmed_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
-  cancel_reason: string;
+  paid_at: string | null;
+  returns: ReturnRequest[];
   can_cancel: boolean;
-  quote: number | null;
-}
-
-export interface Invoice extends Order {
-  document_type: string;
-  bank_accounts: BankAccount[];
-  seller: { name: string; address: string; email: string };
-}
-
-export interface OrdersSummary {
-  total: number;
-  open: number;
-  pending_approval: number;
-  awaiting_payment: number;
-  in_production: number;
-  shipped: number;
-  spent: number;
-  outstanding: number;
+  can_return: boolean;
 }
 
 export interface TrackingInfo {
@@ -466,11 +419,14 @@ export interface TrackingInfo {
   carrier: string;
   tracking_number: string;
   tracking_url: string;
-  estimated_ship_date: string | null;
+  estimated_delivery: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  items: { name: string; variant: string; quantity: number; image_url: string }[];
   total_quantity: number;
-  ship_to: { city: string; country: string };
+  grand_total: number;
+  payment_method: PaymentMethod;
+  ship_to: { city: string; name: string };
 }
 
 export interface BankAccount {
@@ -479,15 +435,12 @@ export interface BankAccount {
   account_name: string;
   account_number: string;
   iban: string;
-  swift: string;
-  currency: string;
-  branch_address: string;
+  instructions: string;
 }
 
 export interface Payment {
   id: string;
   order_number: string;
-  kind: "full" | "deposit" | "balance" | "invoice";
   method: string;
   status: "pending" | "submitted" | "confirmed" | "failed" | "refunded";
   amount: number;
@@ -495,61 +448,86 @@ export interface Payment {
   reference: string;
   proof: string | null;
   note: string;
-  due_date: string | null;
   submitted_at: string | null;
   confirmed_at: string | null;
   created_at: string;
 }
 
-export interface QuoteItem {
+export interface Review {
   id: string;
-  product_slug: string | null;
+  product_slug: string;
   product_name: string;
-  sku: string;
-  fabric_name: string;
-  image_url: string;
-  breakdown: BreakdownLine[];
-  quantity: number;
-  color: string;
-  customization: Record<string, unknown>;
-  artwork: string | null;
-  notes: string;
-  requested_unit_price: number;
-  quoted_unit_price: number | null;
-  line_total: number;
-}
-
-export interface QuoteSummary {
-  id: string;
-  number: string;
-  status: QuoteStatus;
-  status_display: string;
-  currency: string;
-  requested_total: number;
-  quoted_total: number | null;
-  total_quantity: number;
-  item_count: number;
-  requested_by: string;
-  valid_until: string | null;
-  delivery_deadline: string | null;
+  author: { name: string; avatar_url: string };
+  rating: number;
+  title: string;
+  body: string;
+  size_purchased: string;
+  fit: "" | "small" | "true" | "large";
+  image: string | null;
+  status: "pending" | "approved" | "rejected";
+  is_verified_purchase: boolean;
+  helpful_count: number;
+  staff_reply: string;
+  replied_at: string | null;
   created_at: string;
-  quoted_at: string | null;
 }
 
-export interface Quote extends QuoteSummary {
-  company: string;
-  items: QuoteItem[];
-  target_budget: number | null;
-  shipping_address: AddressSnapshot | Record<string, never>;
-  customer_notes: string;
-  response_message: string;
-  handled_by: string;
-  orders: string[];
+export interface ReviewSummary {
+  average: number;
+  total: number;
+  distribution: Record<string, number>;
+}
+
+export interface Banner {
+  id: number;
+  title: string;
+  subtitle: string;
+  eyebrow: string;
+  image: string;
+  mobile_image: string | null;
+  cta_label: string;
+  cta_url: string;
+  placement: "hero" | "promo" | "category";
+  theme: "dark" | "light";
+}
+
+export interface ShippingZoneInfo {
+  name: string;
+  cities: string[];
+  provinces: string[];
+  is_default: boolean;
+  rate: number;
+  free_over: number | null;
+  cod_fee: number;
+  min_days: number;
+  max_days: number;
+}
+
+export interface Storefront {
+  banners: Banner[];
+  announcements: { id: number; text: string; url: string }[];
+  shipping: { free_over_min: number | null; zones: ShippingZoneInfo[] };
+  pages: { title: string; slug: string }[];
+}
+
+export interface Page {
+  title: string;
+  slug: string;
+  body: string;
+  meta_description: string;
+  updated_at: string;
+}
+
+export interface FAQ {
+  id: number;
+  question: string;
+  answer: string;
+  category: string;
 }
 
 export interface Notification {
   id: string;
-  kind: "order" | "quote" | "payment" | "account" | "chat" | "system";
+  kind: "order" | "return" | "payment" | "promo" | "review" | "account" | "chat" | "system";
   level: "info" | "success" | "warning" | "error";
   title: string;
   body: string;
@@ -564,7 +542,7 @@ export interface SuggestResponse {
   query: string;
   products: ProductCard[];
   categories: { name: string; slug: string; product_count: number }[];
-  fabrics: { name: string; slug: string; quality: Quality }[];
+  collections: { name: string; slug: string }[];
 }
 
 export interface SearchResponse extends Paginated<ProductCard> {
@@ -594,12 +572,11 @@ export interface ChatMessage {
 export interface Conversation {
   id: string;
   subject: string;
+  topic: string;
   status: "open" | "pending" | "closed";
-  company: string | null;
   created_by: string;
   assigned_to: string;
   order: { id: string; number: string } | null;
-  quote: { id: string; number: string } | null;
   last_message_at: string | null;
   last_message_preview: string;
   message_count: number;

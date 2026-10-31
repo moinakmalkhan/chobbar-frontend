@@ -1,64 +1,128 @@
 "use client";
 
-import { Clock, Layers, Sparkles } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
+import { Heart } from "lucide-react";
+import { memo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { formatMoney, GENDER_LABELS } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import type { ProductCard as ProductCardType } from "@/types/api";
+import { Price } from "@/components/shared/price";
+import { Rating } from "@/components/shared/rating";
+import { SmartImage } from "@/components/shared/smart-image";
+import { useToggleWishlist, useWishlist } from "@/hooks/use-cart";
+import { useI18n } from "@/i18n/client";
+import { Link } from "@/i18n/link";
+import { cn, mediaUrl } from "@/lib/utils";
+import type { ProductCard as Card } from "@/types/api";
 
-export function ProductCard({ product, priority = false, index = 0, className }: { product: ProductCardType; priority?: boolean; index?: number; className?: string }) {
+function ProductCardBase({
+  product,
+  priority = false,
+  index = 0,
+}: {
+  product: Card;
+  priority?: boolean;
+  index?: number;
+}) {
+  const { t } = useI18n();
+  const wishlist = useWishlist();
+  const toggle = useToggleWishlist();
+  const saved = wishlist.has(product.slug);
+  const [popKey, setPopKey] = useState(0);
+  const hover = mediaUrl(product.hover_image?.url);
+
   return (
     <article
-      style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
-      className={cn("group relative flex animate-in fade-in flex-col overflow-hidden rounded-2xl border border-border bg-card fill-mode-both transition-shadow hover:shadow-lg hover:shadow-ink-900/5", className)}
+      data-reveal
+      style={{ "--reveal-delay": `${(index % 4) * 60}ms` } as React.CSSProperties}
+      className="group relative flex flex-col"
     >
-      <Link href={`/products/${product.slug}`} className="relative block aspect-[4/5] overflow-hidden bg-muted" aria-label={product.name}>
-        {product.image ? (
-          <Image src={product.image.url} alt={product.image.alt} fill priority={priority} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]" />
-        ) : (
-          <Placeholder name={product.name} />
-        )}
-        <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-          {product.is_new ? <Badge variant="brand"><Sparkles className="size-3" /> New</Badge> : null}
-          {product.is_featured && !product.is_new ? <Badge variant="dark">Best seller</Badge> : null}
+      <Link
+        href={`/products/${product.slug}`}
+        prefetch={false}
+        className="bg-muted relative block overflow-hidden rounded-2xl"
+        aria-label={product.name}
+      >
+        <SmartImage
+          src={product.image?.url}
+          alt={product.image?.alt || product.name}
+          fill
+          sizes="(min-width: 1280px) 22vw, (min-width: 768px) 30vw, 46vw"
+          priority={priority}
+          wrapperClassName="aspect-[4/5] w-full"
+          className="transition-[opacity,transform] duration-700 ease-out group-hover:scale-[1.04]"
+        />
+        {hover ? (
+          <SmartImage
+            src={hover}
+            alt=""
+            fill
+            sizes="(min-width: 1280px) 22vw, (min-width: 768px) 30vw, 46vw"
+            loading="lazy"
+            wrapperClassName="!absolute inset-0 hidden opacity-0 transition-opacity duration-500 [@media(hover:hover)]:block group-hover:opacity-100"
+          />
+        ) : null}
+        <div className="pointer-events-none absolute start-2.5 top-2.5 flex flex-col items-start gap-1.5">
+          {!product.in_stock ? (
+            <span className="bg-ink-900/85 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white">
+              {t("common.soldOut")}
+            </span>
+          ) : product.discount_percent > 0 ? (
+            <span className="bg-brand-600 rounded-full px-2.5 py-1 text-[11px] font-bold text-white">
+              −{product.discount_percent}%
+            </span>
+          ) : null}
+          {product.is_new && product.in_stock ? (
+            <span className="text-ink-900 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-bold shadow-sm">
+              {t("common.new")}
+            </span>
+          ) : null}
         </div>
-        {product.is_customizable ? <span className="absolute bottom-3 right-3 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-semibold backdrop-blur">Customizable</span> : null}
       </Link>
-      <div className="flex flex-1 flex-col p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{product.category_name}</p>
-        <h3 className="mt-1 line-clamp-2 font-display text-[15px] font-bold leading-snug">
-          <Link href={`/products/${product.slug}`} className="after:absolute after:inset-0 hover:text-brand-600">{product.name}</Link>
-        </h3>
-        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{product.base_fabric} · {product.genders.map((g) => GENDER_LABELS[g]).join(", ")}</p>
-        <div className="mt-auto flex items-end justify-between pt-3">
-          <div>
-            <p className="text-[11px] text-muted-foreground">from</p>
-            <p className="text-lg font-bold leading-none tabular-nums">
-              {formatMoney(product.base_price)}
-              <span className="ml-1 text-xs font-normal text-muted-foreground">/pc</span>
-            </p>
+      <button
+        type="button"
+        onClick={() => {
+          setPopKey((k) => k + 1);
+          toggle.mutate({ slug: product.slug, name: product.name });
+        }}
+        aria-pressed={saved}
+        aria-label={saved ? t("product.wishlistRemove") : t("product.wishlistAdd")}
+        className="text-ink-900 dark:bg-ink-900/80 absolute end-2.5 top-2.5 grid size-9 place-items-center rounded-full bg-white/90 shadow-sm transition-transform hover:scale-105 active:scale-90 dark:text-white"
+      >
+        <Heart
+          key={popKey}
+          className={cn("size-[18px]", saved && "fill-brand-600 text-brand-600", popKey > 0 && "animate-pop")}
+          strokeWidth={2}
+        />
+      </button>
+      <div className="mt-3 flex flex-1 flex-col gap-1 px-0.5">
+        {product.colors.length > 0 ? (
+          <div className="flex items-center gap-1" aria-label={product.colors.map((c) => c.name).join(", ")}>
+            {product.colors.slice(0, 5).map((c) => (
+              <span
+                key={c.slug}
+                title={c.name}
+                className="size-3 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+                style={{ backgroundColor: c.hex }}
+              />
+            ))}
+            {product.colors.length > 5 ? (
+              <span className="text-muted-foreground text-[11px]">+{product.colors.length - 5}</span>
+            ) : null}
           </div>
-          <div className="flex flex-col items-end gap-1 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1"><Layers className="size-3" /> MOQ {product.min_order_quantity}</span>
-            <span className="inline-flex items-center gap-1"><Clock className="size-3" /> {product.lead_time_days} days</span>
-          </div>
+        ) : null}
+        <Link
+          href={`/products/${product.slug}`}
+          prefetch={false}
+          className="hover:text-brand-700 dark:hover:text-brand-400 line-clamp-2 text-sm leading-snug font-medium transition-colors"
+        >
+          {product.name}
+        </Link>
+        <p className="text-muted-foreground text-xs">{product.category_name}</p>
+        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+          <Price price={product.price} compare={product.compare_at_price} />
+          {product.rating_count > 0 ? <Rating value={product.rating_avg} size={12} /> : null}
         </div>
       </div>
     </article>
   );
 }
 
-export function Placeholder({ name, className }: { name: string; className?: string }) {
-  const hue = Array.from(name).reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
-  return (
-    <div className={cn("flex size-full items-center justify-center", className)} style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 92%), hsl(${(hue + 40) % 360} 60% 84%))` }}>
-      <svg viewBox="0 0 120 120" className="w-1/2 opacity-70" aria-hidden>
-        <path d="M38 22 L60 30 L82 22 L104 38 L92 54 L84 48 L84 100 L36 100 L36 48 L28 54 L16 38 Z" fill="none" stroke={`hsl(${hue} 50% 35%)`} strokeWidth="4" strokeLinejoin="round" />
-        <path d="M48 24 Q60 40 72 24" fill="none" stroke={`hsl(${hue} 50% 35%)`} strokeWidth="4" />
-      </svg>
-    </div>
-  );
-}
+export const ProductCard = memo(ProductCardBase);

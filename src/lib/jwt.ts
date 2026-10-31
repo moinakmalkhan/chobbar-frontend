@@ -6,8 +6,6 @@ export interface AccessClaims {
   user_id: number;
   email?: string;
   is_staff?: boolean;
-  company_id?: string | null;
-  role?: string | null;
 }
 
 /** Seconds of safety margin: refresh when the token has less than this left. */

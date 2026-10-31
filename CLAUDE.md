@@ -1,44 +1,48 @@
-# Leepa Sports — frontend (Next.js)
+# Chobbar — web storefront (Next.js)
 
-Storefront + B2B account area for Leepa Sports. Talks to the Django API in `leepasports-backend` (`NEXT_PUBLIC_API_URL`, default http://localhost:8000/api/v1) and its WebSockets (`NEXT_PUBLIC_WS_URL`).
+Customer storefront for **chobbar.shop** (activewear & streetwear, made in Sialkot). Repo: `chobbar-web` (formerly `leepasports-frontend`).
+Talks to the Django API in `chobbar-backend` (`NEXT_PUBLIC_API_URL`, default http://localhost:8000/api/v1) and its WebSockets (`NEXT_PUBLIC_WS_URL`).
+Languages: English, Urdu and Arabic (Urdu/Arabic are right-to-left).
 
 ## Stack
-Next.js 16 (App Router, Turbopack) · React 19 · TypeScript strict · Tailwind v4 (tokens in `src/app/globals.css`) · Radix primitives (shadcn-style kit in `src/components/ui`) · TanStack Query v5 · Zustand (auth/cart/ui stores) · axios · react-hook-form + zod · sonner toasts · framer-motion (reduced on low-end devices) · lucide icons.
+Next.js 16 (App Router, Turbopack, `src/proxy.ts`) · React 19 · TypeScript strict · Tailwind v4 (tokens in `src/app/globals.css`) · Radix primitives (`src/components/ui`) · TanStack Query v5 · Zustand · axios · react-hook-form + zod · sonner · lucide · marked. No JS animation library: animations are CSS only.
 
 ## Run locally
 ```bash
 npm install
-cp .env.example .env.local      # set NEXT_PUBLIC_GOOGLE_CLIENT_ID to enable Google sign-in
-npm run dev                      # http://localhost:3000 (backend must run on :8000)
+cp .env.example .env.local      # NEXT_PUBLIC_GOOGLE_CLIENT_ID enables "Continue with Google"; INTERNAL_API_TOKEN must match the backend
+npm run dev                      # http://localhost:3000 (backend on :8000)
 npm run typecheck && npm run lint && npm run build
 ```
 
 ## Layout
 ```
-src/app                 routes: / products categories/[slug] products/[slug] search fabrics how-it-works cart checkout
-                        quick-order track (auth)/{login,register,forgot-password,reset-password,verify-email,invitations/[token]}
-                        account/{overview,orders,orders/[id],quotes,quotes/[id],saved-lists,addresses,team,messages,notifications,settings,company}
-                        print/invoice/[id]  robots.ts  sitemap.ts
-src/components/ui       button, input, badge(StatusBadge), card, dialog(side=right|bottom), dropdown, tabs, select, misc(checkbox/radio/switch/tooltip/avatar), pagination, skeleton, empty-state
-src/components/layout   header (mega menu, ⌘K search, cart/notification badges), nav, user-menu, search-command, footer, providers, site-shell
-src/components/catalog  product-card/grid, product-filters (URL state), product-listing, product-configurator, size-matrix, fabric-picker, price-summary, image-gallery
-src/components/cart     cart-line, cart-drawer        src/components/chat  chat-widget, chat-thread
-src/components/account  account-shell, order-timeline, address-form
-src/lib                 api.ts (axios + JWT refresh), jwt.ts, query-client.ts (queryKeys), toast.ts (notify), format.ts, server-api.ts, env.ts, utils.ts
-src/services            one module per API domain (auth, accounts, catalog, cart, orders, quotes, search, notifications, chat)
-src/hooks               use-auth, use-cart, use-catalog, use-chat, use-notifications (realtime WS), use-debounce, use-device
-src/stores              auth-store (persisted tokens/user/companyId), cart-store (guest token, session key, drawer), ui-store
-src/types/api.ts        API types mirroring the Django serializers
+src/proxy.ts            locale routing: bare URLs redirect to /en|/ur|/ar (cookie → CDN country header → Accept-Language → en)
+src/i18n                config (locales, RTL, country→language), dictionaries/{en,ur,ar}.json, server.ts (getDictionary/getT),
+                        client.tsx (I18nProvider, useI18n: t/href/money/number/date/dir), link.tsx (locale-aware Link/useRouter)
+src/app/[locale]        layout.tsx (html lang/dir, fonts, providers) · error · not-found · print/receipt/[id]
+src/app/[locale]/(shop) layout (SiteShell) · home · products · products/[slug] · categories/[slug] · collections/[slug] · search
+                        cart · checkout · checkout/success · track · faq · pages/[slug] · wishlist · (auth)/login|register|forgot-password|reset-password|verify-email
+                        account/{overview,orders,orders/[id],returns,addresses,reviews,messages,messages/[id],notifications,settings}
+src/app                 robots.ts · sitemap.ts (all locales + hreflang) · manifest.ts
+src/components          ui/ (kit) · layout/ (header, mega menu, mobile nav, bottom nav, search, footer, language switcher, logo) · catalog/ · cart/
+                        checkout/ · account/ · orders/ · chat/ · home/ · content/ · shared/ (smart-image, price, rating, google-button, …)
+src/lib                 api.ts (axios + JWT refresh + language header) · server-api.ts (SSR fetch, server-only) · query-client.ts (queryKeys)
+                        toast.ts (notify) · shipping.ts · pk.ts (cities/provinces/phone) · utils.ts (cn, mediaUrl, appPath)
+src/services            one module per API domain        src/hooks  use-auth, use-cart, use-catalog, use-orders, use-chat, use-notifications, …
+src/stores              auth-store, cart-store (guest token), local-store (guest wishlist, recently viewed, recent searches, last checkout contact), ui-store
 ```
 
 ## Conventions (follow these)
-- Data fetching: React Query via `src/services/*`; keys come from `queryKeys` in `src/lib/query-client.ts`. Public SEO pages (home, products, categories, product detail, fabrics) fetch on the server with `serverGet` (ISR 5 min) and hand `initialData` to client components.
-- Auth: tokens live in the persisted zustand store. `src/lib/api.ts` decodes the access JWT and refreshes it *before* requests when <45 s remain (single-flight), retries once on 401, and fires `onSessionExpired`. Headers `X-Company-Id`, `X-Cart-Token`, `X-Session-Key` are added automatically. Never call the API with raw fetch from client code.
-- Toasts: always `notify.success/info/warning/error/action/promise` from `src/lib/toast.ts`; `notify.error(e)` understands the API error envelope. Map field errors with `fieldErrors(e)` + `setError`.
-- Forms: react-hook-form + zod; inputs from `components/ui/input` (`Label`, `Input`, `Textarea`, `FieldError`, `Hint`).
-- Debounce user input before querying (`useDebouncedValue` 250–400 ms); search dropdown, filters and the live price quote already do.
-- Low-end devices: `useDevice().lowEnd` drives `MotionConfig reducedMotion`; prefer CSS `animate-in` utilities over framer-motion for lists; lazy-load heavy widgets with `next/dynamic` (cart drawer, chat).
-- Pagination: list endpoints return `Paginated<T>`; render `<Pagination>` and keep `page` in the URL for catalog pages; feeds (notifications, chat) use `useInfiniteQuery` with cursors.
-- Styling: Tailwind tokens `brand-*`, `ink-*`, `bg-background/card/muted/surface`, `text-muted-foreground`, `border-border`; dark mode via `.dark` on `<html>` (persisted in `leepa.theme`). Rounded-xl/2xl, 16 px gutters on mobile via `.container-x`.
-- Accessibility: every icon button has `aria-label`; dialogs have a `DialogTitle`; keyboard support in the search dropdown and size matrix.
+- Every page lives under `[locale]`. Use `Link`/`useRouter` from `@/i18n/link` (they add the locale); never hard-code `/en`.
+- All copy goes through `t("section.key")`; add keys to **all three** dictionaries (en/ur/ar must have identical keys). Use `money()`/`date()`/`number()` from `useI18n()`.
+- RTL: use logical utilities only (`ms/me/ps/pe`, `start/end`, `text-start`, `rounded-s/e`, `border-s/e`); flip directional icons with `rtl-flip`; sheets use `side="start|end"`.
+- Data: React Query via `src/services/*` with keys from `queryKeys`. SEO pages fetch on the server with `serverGet(path, { locale })` and pass `initialData`.
+- Persisted stores use `skipHydration` and are rehydrated in `Providers` after mount; gate anything that reads device state on `useAuth().hydrated` so server HTML and the first client render match.
+- Auth: tokens in the auth store; `src/lib/api.ts` refreshes the access JWT before requests when <45 s remain (single-flight) and retries once on 401. Headers `X-Language`, `X-Cart-Token`, `X-Session-Key` are added automatically.
+- Toasts: always `notify.*` from `src/lib/toast.ts`; map API field errors with `fieldErrors(e)` + `setError`.
+- Debounce user input before querying (search 280 ms, price filter 500 ms, city → delivery quote 400 ms, cart quantity 350 ms).
+- Low-end devices: `useDevice().lowEnd` sets `html[data-lowend]` which shortens animations and drops blur. Prefer CSS `animate-in`, `animate-rise`, `data-reveal` (scroll reveal). Heavy widgets load with `next/dynamic` (cart drawer, search, mobile nav, chat).
+- Images: `SmartImage` (fade-in, shimmer, branded fallback). Media URLs go through `mediaUrl()`.
+- Styling tokens: `brand-*` (rose), `ink-*` (warm stone), `bg-background/card/muted/surface`; dark mode via `.dark` on `<html>` (persisted in `chobbar.theme`).
 - Commit messages: plain, descriptive, no tool attribution lines.

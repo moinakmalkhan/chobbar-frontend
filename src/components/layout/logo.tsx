@@ -1,26 +1,103 @@
-import Link from "next/link";
-
+/* Generated from the brand geometry (see public/brand/*.svg). Colours follow the theme:
+   ink → currentColor, the "C" cut-out → page background, accents → rose. */
 import { cn } from "@/lib/utils";
 
-export function LogoMark({ className }: { className?: string }) {
+const MARK = (
+  <>
+    <g transform="rotate(-7 60 72)">
+      <path
+        d="M30 44 Q30 40 34 40 L88 40 Q92 40 92.6 44 L100 100 Q100.6 106 94 106 L24 106 Q18 106 18.6 100 Z"
+        fill="currentColor"
+      />
+      <path
+        d="M45 43 V31 a15 15 0 0 1 30 0 V43"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+    </g>
+    <path
+      d="M69.71 59.11 A16 16 0 1 0 69.71 82.89"
+      fill="none"
+      stroke="var(--logo-cut, var(--background))"
+      strokeWidth="10.5"
+      strokeLinecap="round"
+    />
+    <path
+      d="M12 104 C1 97 26 86 58 78 C82 71.5 104 65.5 119 61.5 C121.6 61 122.2 63 119.7 64.3 C102 71.5 80 80 56 88 C38 94 21 100.5 12 104 Z"
+      fill="var(--logo-accent, #e11d48)"
+    />
+    <g stroke="var(--logo-accent, #e11d48)" strokeWidth="4.5" strokeLinecap="round">
+      <path d="M101 21 L104 11" />
+      <path d="M108 31 L116 24" />
+    </g>
+  </>
+);
+
+export function LogoMark({ className, title = "Chobbar" }: { className?: string; title?: string }) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden className={cn("size-8", className)}>
-      <rect width="64" height="64" rx="14" className="fill-ink-900 dark:fill-white" />
-      <path d="M18 14h10v26h18v10H18z" fill="#f97316" />
-      <path d="M34 14h12l-6 14z" className="fill-white dark:fill-ink-900" opacity=".9" />
+    <svg
+      viewBox="4 2 122 110"
+      role="img"
+      aria-label={title}
+      className={cn(
+        "text-ink-900 dark:text-ink-50 h-9 w-auto [--logo-accent:#e11d48] dark:[--logo-accent:#fb7185]",
+        className,
+      )}
+    >
+      {MARK}
     </svg>
   );
 }
 
-export function Logo({ className, compact = false }: { className?: string; compact?: boolean }) {
+export function Logo({ className, title = "Chobbar" }: { className?: string; title?: string }) {
   return (
-    <Link href="/" className={cn("flex items-center gap-2.5", className)} aria-label="Leepa Sports home">
-      <LogoMark />
-      {!compact ? (
-        <span className="font-display text-xl font-extrabold tracking-tight">
-          LEEPA<span className="text-brand-500">SPORTS</span>
-        </span>
-      ) : null}
-    </Link>
+    <svg
+      viewBox="6 4 444 106"
+      role="img"
+      aria-label={title}
+      className={cn(
+        "text-ink-900 dark:text-ink-50 h-8 w-auto [--logo-accent:#e11d48] dark:[--logo-accent:#fb7185]",
+        className,
+      )}
+    >
+      {MARK}
+      <path
+        transform="translate(132.00 97) scale(0.07143 -0.07143)"
+        d="M386 710Q511 710 600.0 644.0Q689 578 719 464H531Q510 508 471.5 531.0Q433 554 384 554Q305 554 256.0 499.0Q207 444 207 352Q207 260 256.0 205.0Q305 150 384 150Q433 150 471.5 173.0Q510 196 531 240H719Q689 126 600.0 60.5Q511 -5 386 -5Q284 -5 203.5 40.5Q123 86 78.0 167.0Q33 248 33 352Q33 456 78.0 537.5Q123 619 203.5 664.5Q284 710 386 710Z"
+        fill="currentColor"
+      />
+      <path
+        transform="translate(185.00 97) scale(0.07143 -0.07143)"
+        d="M617 326V0H447V303Q447 359 418.0 390.0Q389 421 340 421Q291 421 262.0 390.0Q233 359 233 303V0H62V740H233V483Q259 520 304.0 542.0Q349 564 405 564Q501 564 559.0 500.5Q617 437 617 326Z"
+        fill="currentColor"
+      />
+      <path
+        transform="translate(231.71 97) scale(0.07143 -0.07143)"
+        d="M28 279Q28 365 66.0 430.5Q104 496 170.0 531.0Q236 566 318 566Q400 566 466.0 531.0Q532 496 570.0 430.5Q608 365 608 279Q608 193 569.5 127.5Q531 62 464.5 27.0Q398 -8 316 -8Q234 -8 168.5 27.0Q103 62 65.5 127.0Q28 192 28 279ZM434 279Q434 346 400.5 382.0Q367 418 318 418Q268 418 235.0 382.5Q202 347 202 279Q202 212 234.5 176.0Q267 140 316 140Q365 140 399.5 176.0Q434 212 434 279Z"
+        fill="var(--logo-accent, #e11d48)"
+      />
+      <path
+        transform="translate(275.79 97) scale(0.07143 -0.07143)"
+        d="M405 566Q474 566 530.0 531.0Q586 496 618.5 431.0Q651 366 651 280Q651 194 618.5 128.5Q586 63 530.0 27.5Q474 -8 405 -8Q346 -8 302.0 15.5Q258 39 233 78V0H62V740H233V479Q257 518 302.0 542.0Q347 566 405 566ZM354 417Q303 417 267.5 380.0Q232 343 232 279Q232 215 267.5 178.0Q303 141 354 141Q405 141 441.0 178.5Q477 216 477 280Q477 344 441.5 380.5Q406 417 354 417Z"
+        fill="currentColor"
+      />
+      <path
+        transform="translate(322.86 97) scale(0.07143 -0.07143)"
+        d="M405 566Q474 566 530.0 531.0Q586 496 618.5 431.0Q651 366 651 280Q651 194 618.5 128.5Q586 63 530.0 27.5Q474 -8 405 -8Q346 -8 302.0 15.5Q258 39 233 78V0H62V740H233V479Q257 518 302.0 542.0Q347 566 405 566ZM354 417Q303 417 267.5 380.0Q232 343 232 279Q232 215 267.5 178.0Q303 141 354 141Q405 141 441.0 178.5Q477 216 477 280Q477 344 441.5 380.5Q406 417 354 417Z"
+        fill="currentColor"
+      />
+      <path
+        transform="translate(369.93 97) scale(0.07143 -0.07143)"
+        d="M274 566Q333 566 377.5 542.0Q422 518 446 479V558H617V0H446V79Q421 40 376.5 16.0Q332 -8 273 -8Q205 -8 149.0 27.5Q93 63 60.5 128.5Q28 194 28 280Q28 366 60.5 431.0Q93 496 149.0 531.0Q205 566 274 566ZM324 417Q273 417 237.5 380.5Q202 344 202 280Q202 216 237.5 178.5Q273 141 324 141Q375 141 410.5 178.0Q446 215 446 279Q446 343 410.5 380.0Q375 417 324 417Z"
+        fill="currentColor"
+      />
+      <path
+        transform="translate(417.00 97) scale(0.07143 -0.07143)"
+        d="M408 564V383H361Q297 383 265.0 355.5Q233 328 233 259V0H62V558H233V465Q263 511 308.0 537.5Q353 564 408 564Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }
