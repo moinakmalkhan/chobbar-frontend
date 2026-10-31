@@ -1,6 +1,6 @@
 # Chobbar — web storefront (Next.js)
 
-Customer storefront for **chobbar.shop** (activewear & streetwear, made in Sialkot). Repo: `chobbar-web` (formerly `leepasports-frontend`).
+Customer storefront for **chobbar.shop** (activewear & streetwear, made in Sialkot). Repo: `chobbar-frontend`.
 Talks to the Django API in `chobbar-backend` (`NEXT_PUBLIC_API_URL`, default http://localhost:8000/api/v1) and its WebSockets (`NEXT_PUBLIC_WS_URL`).
 Languages: English, Urdu and Arabic (Urdu/Arabic are right-to-left).
 
